@@ -1,48 +1,58 @@
+using DotNetEnv;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
+using System.Text;
+using PodcastAPI.Data;
+using PodcastAPI.Services;
+using PodcastAPI.Models;
+
+// 1. .env dosyasını en başta yükle
+Env.Load();
+
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container
+// 2. .env dosyasından veritabanı bilgilerini çek
+var dbHost = Env.GetString("DB_HOST");
+var dbPort = Env.GetString("DB_PORT");
+var dbName = Env.GetString("DB_NAME");
+var dbUser = Env.GetString("DB_USER");
+var dbPass = Env.GetString("DB_PASS");
+
+var connectionString = $"Host={dbHost};Port={dbPort};Database={dbName};Username={dbUser};Password={dbPass}";
+
+// 3. Veritabanı Bağlantısını (PostgreSQL) Kaydet
+builder.Services.AddDbContext<AppDbContext>(options =>
+    options.UseNpgsql(connectionString));
+
+// 4. JWT Ayarlarını Yapılandır
+var jwtSecret = Env.GetString("JWT_SECRET");
+
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret)),
+            ValidateIssuer = false,
+            ValidateAudience = false,
+            ClockSkew = TimeSpan.Zero
+        };
+    });
+
+builder.Services.AddAuthorization();
 builder.Services.AddControllers();
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+
+// 5. Servis Kaydı (Dependency Injection)
+builder.Services.AddScoped<ITokenService, TokenService>();
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
+// 6. Middleware Sıralaması
+app.UseAuthentication(); 
+app.UseAuthorization();
 
-app.UseHttpsRedirection();
-
-// Map Controllers (TestController dahil)
 app.MapControllers();
 
-// Eğer istersen minimal example endpoint
-app.MapGet("/weatherforecast", () =>
-{
-    var summaries = new[]
-    {
-        "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
-    };
-
-    var forecast = Enumerable.Range(1, 5).Select(index =>
-        new WeatherForecast
-        (
-            DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
-            Random.Shared.Next(-20, 55),
-            summaries[Random.Shared.Next(summaries.Length)]
-        ))
-        .ToArray();
-    return forecast;
-})
-.WithName("GetWeatherForecast")
-.WithOpenApi();
-
 app.Run();
-
-record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
-{
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
-}
