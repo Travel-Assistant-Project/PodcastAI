@@ -1,16 +1,21 @@
 using DotNetEnv;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
-using System.Text;
 using PodcastAPI.Data;
 using PodcastAPI.Services;
 using PodcastAPI.Models;
 
-// 1. .env dosyasını en başta yükle
-Env.Load();
-
 var builder = WebApplication.CreateBuilder(args);
+
+// .env: her zaman proje kökünden (dotnet run bazen farklı cwd ile çalışır; yanlış DB'ye yazılıyor sanılıyor)
+var envFile = Path.Combine(builder.Environment.ContentRootPath, ".env");
+if (File.Exists(envFile))
+    Env.Load(envFile);
+else
+    Env.Load();
 
 // 2. .env dosyasından veritabanı bilgilerini çek
 var dbHost = Env.GetString("DB_HOST");
@@ -34,7 +39,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuerSigningKey = true,
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret)),
+            IssuerSigningKey = JwtSigningKeyHelper.CreateKey(jwtSecret),
             ValidateIssuer = false,
             ValidateAudience = false,
             ClockSkew = TimeSpan.Zero
@@ -46,8 +51,14 @@ builder.Services.AddControllers();
 
 // 5. Servis Kaydı (Dependency Injection)
 builder.Services.AddScoped<ITokenService, TokenService>();
+builder.Services.AddScoped<IPasswordHasher, PasswordHasherService>();
 
 var app = builder.Build();
+
+var startupLogger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Startup");
+startupLogger.LogInformation(
+    "PostgreSQL bağlantısı: Host={Host}; Port={Port}; Database={Database}; User={User}",
+    dbHost, dbPort, dbName, dbUser);
 
 // 6. Middleware Sıralaması
 app.UseAuthentication(); 

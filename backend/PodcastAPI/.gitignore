@@ -1,0 +1,10 @@
+# .NET Build Artifacs
+**/bin/
+**/obj/
+
+# Environment Variables
+.env
+*.env
+
+# VS Code
+.vscode/

@@ -1,0 +1,1 @@
+-- ek scriptler buraya
