@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
 using PodcastAPI.Data;
 using PodcastAPI.Services;
+using PodcastAPI.Services.AiService;
 using PodcastAPI.Models;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -53,6 +54,20 @@ builder.Services.AddControllers();
 builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<IPasswordHasher, PasswordHasherService>();
 
+// 5.1 ai-service HTTP istemcisi
+var aiServiceUrl = Env.GetString("AI_SERVICE_URL") ?? "http://localhost:8001";
+var aiServiceSecret = Env.GetString("AI_SERVICE_SECRET") ?? string.Empty;
+
+builder.Services.AddHttpClient<IAiServiceClient, AiServiceClient>(client =>
+{
+    client.BaseAddress = new Uri(aiServiceUrl);
+    client.Timeout = TimeSpan.FromMinutes(5); // TTS + LLM zincirine yetecek geniş pencere
+    if (!string.IsNullOrWhiteSpace(aiServiceSecret))
+    {
+        client.DefaultRequestHeaders.Add("X-Internal-Secret", aiServiceSecret);
+    }
+});
+
 var app = builder.Build();
 
 var startupLogger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Startup");
@@ -61,6 +76,9 @@ startupLogger.LogInformation(
     dbHost, dbPort, dbName, dbUser);
 
 // 6. Middleware Sıralaması
+// wwwroot/ altındaki podcast mp3'lerini /podcasts/{id}.mp3 olarak sun.
+app.UseStaticFiles();
+
 app.UseAuthentication(); 
 app.UseAuthorization();
 

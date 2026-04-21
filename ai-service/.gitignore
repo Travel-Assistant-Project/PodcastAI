@@ -1,0 +1,12 @@
+venv/
+__pycache__/
+*.pyc
+.env
+*.env
+.pytest_cache/
+storage/
+tmp/
+
+# Firebase service account anahtarı
+firebase-credentials.json
+*firebase*.json
