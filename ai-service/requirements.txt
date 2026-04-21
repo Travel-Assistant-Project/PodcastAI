@@ -1,0 +1,12 @@
+fastapi>=0.115,<1.0
+uvicorn[standard]>=0.30,<1.0
+httpx>=0.27,<1.0
+pydantic>=2.8,<3.0
+pydantic-settings>=2.4,<3.0
+python-dotenv>=1.0,<2.0
+# Audio birleştirme (Adım 8'de gerekecek, sistemde ffmpeg kurulu olmalı)
+pydub>=0.25,<1.0
+# Python 3.13'te audioop kaldırıldı, pydub için polyfill
+audioop-lts>=0.2,<1.0
+# Firebase Storage yüklemesi
+firebase-admin>=6.5,<7.0

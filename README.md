@@ -183,6 +183,10 @@ cd ai-service
 source venv/bin/activate
 uvicorn main:app --reload --port 8000
 
+çalışmazsa:
+source venv/bin/activate
+uvicorn app.main:app --reload --port 8001
+
 🔵 Terminal 2 → Backend (.NET)
 cd backend/PodcastAPI
 dotnet run
