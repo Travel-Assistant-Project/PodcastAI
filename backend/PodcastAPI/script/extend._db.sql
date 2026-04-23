@@ -19,3 +19,8 @@ ON CONFLICT (Name) DO NOTHING;
 -- aktif satırı vurgulayabilsin diye podcasts tablosuna eklendi.
 ALTER TABLE podcasts
     ADD COLUMN IF NOT EXISTS transcriptjson jsonb;
+
+    -- 23.04.2026: Transcript (zaman damgalı konuşma metni) desteği.
+-- AI servisinden gelen [{speaker, text, startMs, endMs}] şeklindeki detaylı 
+-- konuşma verilerini saklayabilmek için podcasts tablosuna eklendi.
+ALTER TABLE podcasts ADD COLUMN IF NOT EXISTS transcriptjson jsonb;
