@@ -215,3 +215,5 @@ FastAPI çalıştırırken
 ❌ Kapat:
 .NET tarafına geçerken
 React Native çalıştırırken
+
+DOĞRU ÇALIŞTIRILMALI
