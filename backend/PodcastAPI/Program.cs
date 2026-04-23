@@ -1,43 +1,35 @@
 using DotNetEnv;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
-using Microsoft.IdentityModel.Tokens;
 using PodcastAPI.Data;
 using PodcastAPI.Services;
-using PodcastAPI.Models;
+using PodcastAPI.Services.AiService;
+using Hangfire;
+using Hangfire.PostgreSql;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// .env: her zaman proje kökünden (dotnet run bazen farklı cwd ile çalışır; yanlış DB'ye yazılıyor sanılıyor)
+// .env dosyasını yükle
 var envFile = Path.Combine(builder.Environment.ContentRootPath, ".env");
-if (File.Exists(envFile))
-    Env.Load(envFile);
-else
-    Env.Load();
+if (File.Exists(envFile)) Env.Load(envFile); else Env.Load();
 
-// 2. .env dosyasından veritabanı bilgilerini çek
-var dbHost = Env.GetString("DB_HOST");
-var dbPort = Env.GetString("DB_PORT");
-var dbName = Env.GetString("DB_NAME");
-var dbUser = Env.GetString("DB_USER");
-var dbPass = Env.GetString("DB_PASS");
+// Veritabanı bağlantı dizesi
+var connectionString = $"Host={Env.GetString("DB_HOST")};Port={Env.GetString("DB_PORT")};Database={Env.GetString("DB_NAME")};Username={Env.GetString("DB_USER")};Password={Env.GetString("DB_PASS")}";
 
-var connectionString = $"Host={dbHost};Port={dbPort};Database={dbName};Username={dbUser};Password={dbPass}";
+builder.Services.AddDbContext<AppDbContext>(options => options.UseNpgsql(connectionString));
 
-// 3. Veritabanı Bağlantısını (PostgreSQL) Kaydet
-builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(connectionString));
+// Hangfire yapılandırması
+builder.Services.AddHangfire(config => config
+    .UsePostgreSqlStorage(c => c.UseNpgsqlConnection(connectionString)));
 
-// 4. JWT Ayarlarını Yapılandır
+// Arka plan işlerini işleyecek olan worker'ı başlat
+builder.Services.AddHangfireServer();
+
+// JWT Ayarları
 var jwtSecret = Env.GetString("JWT_SECRET");
-
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options =>
-    {
-        options.TokenValidationParameters = new TokenValidationParameters
-        {
+    .AddJwtBearer(options => {
+        options.TokenValidationParameters = new Microsoft.IdentityModel.Tokens.TokenValidationParameters {
             ValidateIssuerSigningKey = true,
             IssuerSigningKey = JwtSigningKeyHelper.CreateKey(jwtSecret),
             ValidateIssuer = false,
@@ -49,21 +41,26 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 builder.Services.AddAuthorization();
 builder.Services.AddControllers();
 
-// 5. Servis Kaydı (Dependency Injection)
+// Servis Kayıtları
 builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<IPasswordHasher, PasswordHasherService>();
+builder.Services.AddScoped<IPodcastGeneratorJob, PodcastGeneratorJob>();
+
+// AI Microservice için HTTP istemcisi
+builder.Services.AddHttpClient<IAiServiceClient, AiServiceClient>(client => {
+    client.BaseAddress = new Uri(Env.GetString("AI_SERVICE_URL") ?? "http://localhost:8001");
+    client.Timeout = TimeSpan.FromMinutes(5);
+});
 
 var app = builder.Build();
 
-var startupLogger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Startup");
-startupLogger.LogInformation(
-    "PostgreSQL bağlantısı: Host={Host}; Port={Port}; Database={Database}; User={User}",
-    dbHost, dbPort, dbName, dbUser);
+app.UseStaticFiles();
 
-// 6. Middleware Sıralaması
+// Hangfire Dashboard paneli (takip için /hangfire)
+app.UseHangfireDashboard();
+
 app.UseAuthentication(); 
 app.UseAuthorization();
-
 app.MapControllers();
 
 app.Run();
