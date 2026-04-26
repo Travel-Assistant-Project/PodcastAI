@@ -22,38 +22,257 @@ namespace PodcastAPI.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
-            modelBuilder.Entity("PodcastAPI.Models.User", b =>
+            modelBuilder.Entity("PodcastAPI.Models.Interest", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
-                    b.Property<int?>("Age")
-                        .HasColumnType("integer");
+                    b.Property<string>("Description")
+                        .HasColumnType("text")
+                        .HasColumnName("description");
 
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Email")
+                    b.Property<string>("Name")
                         .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("FullName")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("Occupation")
-                        .HasColumnType("text");
-
-                    b.Property<string>("PasswordHash")
-                        .IsRequired()
-                        .HasColumnType("text");
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("name");
 
                     b.HasKey("Id");
 
-                    b.ToTable("Users");
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("interests", null, t =>
+                        {
+                            t.ExcludeFromMigrations();
+                        });
+                });
+
+            modelBuilder.Entity("PodcastAPI.Models.Podcast", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("AudioUrl")
+                        .HasColumnType("text")
+                        .HasColumnName("audiourl");
+
+                    b.Property<string>("CategoryName")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("categoryname");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("createdat");
+
+                    b.Property<int?>("DurationSeconds")
+                        .HasColumnType("integer")
+                        .HasColumnName("durationseconds");
+
+                    b.Property<string>("ScriptText")
+                        .HasColumnType("text")
+                        .HasColumnName("scripttext");
+
+                    b.Property<int>("SpeakerCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("speakercount");
+
+                    b.Property<string>("Status")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.Property<string>("Title")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("title");
+
+                    b.Property<string>("Tone")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("tone");
+
+                    b.Property<string>("TranscriptJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("transcriptjson");
+
+                    b.Property<Guid?>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("userid");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("podcasts", null, t =>
+                        {
+                            t.ExcludeFromMigrations();
+                        });
+                });
+
+            modelBuilder.Entity("PodcastAPI.Models.PodcastSource", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("NewsTitle")
+                        .HasColumnType("text")
+                        .HasColumnName("newstitle");
+
+                    b.Property<string>("NewsUrl")
+                        .HasColumnType("text")
+                        .HasColumnName("newsurl");
+
+                    b.Property<Guid>("PodcastId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("podcastid");
+
+                    b.Property<DateTime?>("PublishedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("publishedat");
+
+                    b.Property<string>("SourceName")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("sourcename");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PodcastId");
+
+                    b.ToTable("podcastsources", null, t =>
+                        {
+                            t.ExcludeFromMigrations();
+                        });
+                });
+
+            modelBuilder.Entity("PodcastAPI.Models.User", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int?>("Age")
+                        .HasColumnType("integer")
+                        .HasColumnName("age");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("createdat");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("email");
+
+                    b.Property<string>("FullName")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("fullname");
+
+                    b.Property<string>("Occupation")
+                        .HasColumnType("text")
+                        .HasColumnName("job");
+
+                    b.Property<string>("PasswordHash")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("passwordhash");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("users", (string)null);
+                });
+
+            modelBuilder.Entity("PodcastAPI.Models.UserFavorite", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Duration")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("duration");
+
+                    b.Property<string>("ImageUrl")
+                        .HasColumnType("text")
+                        .HasColumnName("imageurl");
+
+                    b.Property<string>("PodcastExternalId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("podcastexternalid");
+
+                    b.Property<DateTime>("SavedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("savedat");
+
+                    b.Property<string>("Tag")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("tag");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("title");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("userid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "PodcastExternalId")
+                        .IsUnique();
+
+                    b.ToTable("userfavorites", (string)null);
+                });
+
+            modelBuilder.Entity("PodcastAPI.Models.UserInterest", b =>
+                {
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("userid");
+
+                    b.Property<int>("InterestId")
+                        .HasColumnType("integer")
+                        .HasColumnName("interestid");
+
+                    b.HasKey("UserId", "InterestId");
+
+                    b.ToTable("userinterests", null, t =>
+                        {
+                            t.ExcludeFromMigrations();
+                        });
+                });
+
+            modelBuilder.Entity("PodcastAPI.Models.PodcastSource", b =>
+                {
+                    b.HasOne("PodcastAPI.Models.Podcast", null)
+                        .WithMany("Sources")
+                        .HasForeignKey("PodcastId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("PodcastAPI.Models.Podcast", b =>
+                {
+                    b.Navigation("Sources");
                 });
 #pragma warning restore 612, 618
         }
