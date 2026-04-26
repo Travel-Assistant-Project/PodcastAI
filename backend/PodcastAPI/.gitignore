@@ -12,3 +12,5 @@
 # Üretilen podcast mp3'leri (sadece .gitkeep commit'lensin)
 wwwroot/podcasts/*
 !wwwroot/podcasts/.gitkeep
+
+.venv/
