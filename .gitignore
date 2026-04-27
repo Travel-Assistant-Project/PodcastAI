@@ -1,4 +1,4 @@
-# .NET Build Artifacs
+# .NET Build Artifacts
 **/bin/
 **/obj/
 
@@ -8,3 +8,21 @@
 
 # VS Code
 .vscode/
+
+# Python virtual environment
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+
+# Node modules
+node_modules/
+
+# Expo
+.expo/
+mobile/.expo/

@@ -84,5 +84,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.Property(e => e.NewsUrl).HasColumnName("newsurl");
             entity.Property(e => e.PublishedAt).HasColumnName("publishedat");
         });
+
     }
 }

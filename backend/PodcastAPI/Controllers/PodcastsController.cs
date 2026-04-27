@@ -60,6 +60,32 @@ public class PodcastsController(
         return Ok(ToDetailDto(podcast));
     }
 
+    [HttpGet]
+    public async Task<ActionResult<List<PodcastSummaryDto>>> GetAll()
+    {
+        if (!TryGetUserId(out var userId)) return Unauthorized(new { message = "Invalid token." });
+
+        var podcasts = await db.Podcasts
+            .AsNoTracking()
+            .Where(p => p.UserId == userId)
+            .OrderByDescending(p => p.CreatedAt)
+            .Select(p => new PodcastSummaryDto
+            {
+                Id = p.Id,
+                Title = p.Title,
+                AudioUrl = p.AudioUrl,
+                DurationSeconds = p.DurationSeconds,
+                Status = p.Status,
+                Categories = string.IsNullOrWhiteSpace(p.CategoryName)
+                    ? new List<string>()
+                    : p.CategoryName.Split(PodcastConstants.CategorySeparator, StringSplitOptions.RemoveEmptyEntries).ToList(),
+                CreatedAt = p.CreatedAt
+            })
+            .ToListAsync();
+
+        return Ok(podcasts);
+    }
+
     private bool TryGetUserId(out Guid userId)
     {
         var raw = User.FindFirstValue(ClaimTypes.NameIdentifier);
