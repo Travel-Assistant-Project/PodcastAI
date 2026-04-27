@@ -49,9 +49,17 @@ builder.Services.AddScoped<IPasswordHasher, PasswordHasherService>();
 builder.Services.AddScoped<IPodcastGeneratorJob, PodcastGeneratorJob>();
 
 // AI Microservice için HTTP istemcisi
+var aiServiceSecret = Env.GetString("AI_SERVICE_SECRET");
+if (string.IsNullOrWhiteSpace(aiServiceSecret))
+{
+    throw new InvalidOperationException(
+        "AI_SERVICE_SECRET .env'de tanımlı değil. ai-service ile aynı sırrı kullanmalı.");
+}
+
 builder.Services.AddHttpClient<IAiServiceClient, AiServiceClient>(client => {
     client.BaseAddress = new Uri(Env.GetString("AI_SERVICE_URL") ?? "http://localhost:8001");
     client.Timeout = TimeSpan.FromMinutes(5);
+    client.DefaultRequestHeaders.Add("X-Internal-Secret", aiServiceSecret);
 });
 
 var app = builder.Build();
