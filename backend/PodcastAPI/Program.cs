@@ -10,6 +10,8 @@ using Hangfire.PostgreSql;
 var builder = WebApplication.CreateBuilder(args);
 
 // .env dosyasını yükle
+Env.Load();
+
 var envFile = Path.Combine(builder.Environment.ContentRootPath, ".env");
 if (File.Exists(envFile)) Env.Load(envFile); else Env.Load();
 
@@ -28,8 +30,10 @@ builder.Services.AddHangfireServer();
 // JWT Ayarları
 var jwtSecret = Env.GetString("JWT_SECRET");
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options => {
-        options.TokenValidationParameters = new Microsoft.IdentityModel.Tokens.TokenValidationParameters {
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new Microsoft.IdentityModel.Tokens.TokenValidationParameters
+        {
             ValidateIssuerSigningKey = true,
             IssuerSigningKey = JwtSigningKeyHelper.CreateKey(jwtSecret),
             ValidateIssuer = false,
@@ -56,7 +60,8 @@ if (string.IsNullOrWhiteSpace(aiServiceSecret))
         "AI_SERVICE_SECRET .env'de tanımlı değil. ai-service ile aynı sırrı kullanmalı.");
 }
 
-builder.Services.AddHttpClient<IAiServiceClient, AiServiceClient>(client => {
+builder.Services.AddHttpClient<IAiServiceClient, AiServiceClient>(client =>
+{
     client.BaseAddress = new Uri(Env.GetString("AI_SERVICE_URL") ?? "http://localhost:8001");
     client.Timeout = TimeSpan.FromMinutes(5);
     client.DefaultRequestHeaders.Add("X-Internal-Secret", aiServiceSecret);
@@ -75,7 +80,7 @@ app.UseStaticFiles();
 // Hangfire Dashboard paneli (takip için /hangfire)
 app.UseHangfireDashboard();
 
-app.UseAuthentication(); 
+app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 

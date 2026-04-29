@@ -10,6 +10,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<UserInterest> UserInterests { get; set; }
     public DbSet<Podcast> Podcasts { get; set; }
     public DbSet<PodcastSource> PodcastSources { get; set; }
+    public DbSet<Favorite> Favorites { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -84,6 +85,22 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.Property(e => e.NewsUrl).HasColumnName("newsurl");
             entity.Property(e => e.PublishedAt).HasColumnName("publishedat");
         });
+
+        // Favorites (composite PK)
+        modelBuilder.Entity<Favorite>(entity =>
+{
+    entity.ToTable("favorites"); // DB Script'teki tablo adı [cite: 933]
+    entity.HasKey(e => new { e.UserId, e.PodcastId }); // Composite PK 
+
+    entity.Property(e => e.UserId).HasColumnName("userid");
+    entity.Property(e => e.PodcastId).HasColumnName("podcastid");
+    entity.Property(e => e.CreatedAt).HasColumnName("createdat");
+
+    // İlişki Tanımı
+    entity.HasOne(e => e.Podcast)
+          .WithMany()
+          .HasForeignKey(e => e.PodcastId);
+});
 
     }
 }
