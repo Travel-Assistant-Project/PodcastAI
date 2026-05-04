@@ -35,6 +35,10 @@ public class PodcastsController(
             SpeakerCount = request.SpeakerCount,
             Status = PodcastConstants.Status.Processing,
             CategoryName = string.Join(PodcastConstants.CategorySeparator, request.Categories),
+            LearningMode = request.LearningMode,
+            CefrLevel = request.LearningMode
+                ? request.CefrLevel?.Trim().ToUpperInvariant()
+                : null,
             CreatedAt = DateTime.UtcNow
         };
 
@@ -79,7 +83,9 @@ public class PodcastsController(
                 Categories = string.IsNullOrWhiteSpace(p.CategoryName)
                     ? new List<string>()
                     : p.CategoryName.Split(PodcastConstants.CategorySeparator, StringSplitOptions.RemoveEmptyEntries).ToList(),
-                CreatedAt = p.CreatedAt
+                CreatedAt = p.CreatedAt,
+                LearningMode = p.LearningMode,
+                CefrLevel = p.CefrLevel
             })
             .ToListAsync();
 
@@ -97,9 +103,23 @@ public class PodcastsController(
         Id = p.Id,
         UserId = p.UserId,
         Title = p.Title,
+        ScriptText = p.ScriptText,
+        AudioUrl = p.AudioUrl,
+        DurationSeconds = p.DurationSeconds,
+        Tone = p.Tone,
+        SpeakerCount = p.SpeakerCount,
         Status = p.Status,
         Categories = string.IsNullOrWhiteSpace(p.CategoryName) ? new List<string>() : p.CategoryName.Split(PodcastConstants.CategorySeparator).ToList(),
+        CefrLevel = p.CefrLevel,
+        LearningMode = p.LearningMode,
         CreatedAt = p.CreatedAt,
+        Sources = p.Sources.Select(s => new PodcastSourceDto
+        {
+            SourceName = s.SourceName,
+            NewsTitle = s.NewsTitle,
+            NewsUrl = s.NewsUrl,
+            PublishedAt = s.PublishedAt
+        }).ToList(),
         Transcript = string.IsNullOrWhiteSpace(p.TranscriptJson) ? new() : JsonSerializer.Deserialize<List<TranscriptSegmentDto>>(p.TranscriptJson, TranscriptJsonOptions) ?? new()
     };
 }

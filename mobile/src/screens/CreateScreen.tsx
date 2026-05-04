@@ -1,29 +1,53 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Image,
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import { useRouter } from 'expo-router';
 
-const ALL_CATEGORIES = ['Technology', 'Science', 'Business', 'Health', 'World News', 'AI'];
-const TONES = [
-  { id: 'official', label: 'Official', desc: 'Formal, concise, data-driven report.', icon: 'gavel' },
-  { id: 'friendly', label: 'Friendly', desc: 'Accessible, warm, and explanatory.', icon: 'sentiment-satisfied' },
-  { id: 'entertaining', label: 'Entertaining', desc: 'Dynamic storytelling with personality.', icon: 'theater-comedy' },
+import { generatePodcast } from '@/src/api/podcasts.api';
+import type { CefrLevel } from '@/src/api/learning.api';
+
+/** Görünen isim -> ai-service / NewsAPI _CATEGORY_MAP anahtarı */
+const CATEGORY_OPTIONS: { label: string; apiSlug: string; showSparkle?: boolean }[] = [
+  { label: 'Technology', apiSlug: 'technology' },
+  { label: 'Science', apiSlug: 'science' },
+  { label: 'Business', apiSlug: 'economy' },
+  { label: 'Health', apiSlug: 'health' },
+  { label: 'World News', apiSlug: 'world' },
+  { label: 'Sports', apiSlug: 'sports' },
+  { label: 'Entertainment', apiSlug: 'entertainment' },
+  { label: 'Finance', apiSlug: 'finance' },
+  { label: 'Music', apiSlug: 'music' },
+  { label: 'AI', apiSlug: 'ai', showSparkle: true },
 ];
-const DURATIONS = ['2 min', '5 min', '10 min'];
+const TONES = [
+  { id: 'formal',  label: 'Official',     desc: 'Formal, concise, data-driven report.',           icon: 'gavel' },
+  { id: 'casual',  label: 'Friendly',     desc: 'Accessible, warm, and explanatory.',             icon: 'sentiment-satisfied' },
+  { id: 'fun',     label: 'Entertaining', desc: 'Dynamic storytelling with personality.',         icon: 'theater-comedy' },
+];
+const DURATIONS: { id: number; label: string }[] = [
+  { id: 2,  label: '2 min' },
+  { id: 5,  label: '5 min' },
+  { id: 10, label: '10 min' },
+];
+const CEFR_LEVELS: CefrLevel[] = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
 
 export default function CreateScreen() {
+  const router = useRouter();
+
   const [selectedCategories, setSelectedCategories] = useState<string[]>(['Science']);
   const [hostMode, setHostMode] = useState<'single' | 'dual'>('single');
-  const [tone, setTone] = useState('official');
-  const [duration, setDuration] = useState('5 min');
+  const [tone, setTone] = useState('formal');
+  const [duration, setDuration] = useState<number>(5);
+  const [learningMode, setLearningMode] = useState<boolean>(false);
+  const [cefrLevel, setCefrLevel] = useState<CefrLevel>('B1');
   const [isGenerating, setIsGenerating] = useState(false);
 
   const toggleCategory = (cat: string) => {
@@ -32,16 +56,46 @@ export default function CreateScreen() {
     );
   };
 
-  const handleGenerate = () => {
+  const apiCategories = useMemo(
+    () =>
+      selectedCategories.map((label) => {
+        const opt = CATEGORY_OPTIONS.find((o) => o.label === label);
+        return opt?.apiSlug ?? label.toLowerCase().replace(/\s+/g, '-');
+      }),
+    [selectedCategories],
+  );
+
+  const handleGenerate = async () => {
     if (selectedCategories.length === 0) {
-      Alert.alert('Kategori Seç', 'Lütfen en az bir kategori seçin.');
+      Alert.alert('Pick categories', 'Choose at least one category.');
       return;
     }
     setIsGenerating(true);
-    setTimeout(() => {
+    try {
+      const resp = await generatePodcast({
+        categories: apiCategories,
+        tone,
+        durationMinutes: duration,
+        speakerCount: hostMode === 'dual' ? 2 : 1,
+        learningMode,
+        cefrLevel: learningMode ? cefrLevel : null,
+      });
+      Alert.alert(
+        'Podcast in progress',
+        'Your episode is being generated in the background. When it is ready, open it from the details screen.',
+        [
+          {
+            text: 'OK',
+            onPress: () => router.push({ pathname: '/podcast', params: { id: resp.podcastId } }),
+          },
+        ],
+      );
+    } catch (error: any) {
+      const msg = error?.response?.data?.message ?? 'Could not start podcast generation.';
+      Alert.alert('Error', msg);
+    } finally {
       setIsGenerating(false);
-      Alert.alert('Podcast Oluşturuldu!', 'Podcastiniz hazırlanıyor. Kısa süre içinde dinleyebilirsiniz.');
-    }, 2500);
+    }
   };
 
   return (
@@ -72,15 +126,15 @@ export default function CreateScreen() {
             <Text style={styles.stepLabel}>CHOOSE CATEGORIES</Text>
           </View>
           <View style={styles.tagsWrap}>
-            {ALL_CATEGORIES.map((cat) => {
-              const active = selectedCategories.includes(cat);
+            {CATEGORY_OPTIONS.map(({ label, showSparkle }) => {
+              const active = selectedCategories.includes(label);
               return (
                 <TouchableOpacity
-                  key={cat}
+                  key={label}
                   style={[styles.tag, active && styles.tagActive]}
-                  onPress={() => toggleCategory(cat)}
+                  onPress={() => toggleCategory(label)}
                   activeOpacity={0.8}>
-                  {cat === 'AI' && (
+                  {showSparkle && (
                     <MaterialIcons
                       name="auto-awesome"
                       size={13}
@@ -88,7 +142,7 @@ export default function CreateScreen() {
                       style={{ marginRight: 4 }}
                     />
                   )}
-                  <Text style={[styles.tagText, active && styles.tagTextActive]}>{cat}</Text>
+                  <Text style={[styles.tagText, active && styles.tagTextActive]}>{label}</Text>
                 </TouchableOpacity>
               );
             })}
@@ -173,65 +227,100 @@ export default function CreateScreen() {
           <View style={styles.durationRow}>
             {DURATIONS.map((d) => (
               <TouchableOpacity
-                key={d}
-                style={[styles.durationBtn, duration === d && styles.durationBtnActive]}
-                onPress={() => setDuration(d)}
+                key={d.id}
+                style={[styles.durationBtn, duration === d.id && styles.durationBtnActive]}
+                onPress={() => setDuration(d.id)}
                 activeOpacity={0.8}>
-                <Text style={[styles.durationText, duration === d && styles.durationTextActive]}>
-                  {d}
+                <Text style={[styles.durationText, duration === d.id && styles.durationTextActive]}>
+                  {d.label}
                 </Text>
               </TouchableOpacity>
             ))}
           </View>
         </View>
 
-        {/* Preview Card */}
-        <View style={styles.previewCard}>
-          <View style={styles.previewMedia}>
-            <Image
-              source={{
-                uri: 'https://images.unsplash.com/photo-1614730321146-b6fa6a46bcb4?q=80&w=800&auto=format&fit=crop',
-              }}
-              style={styles.previewImage}
-            />
-            <View style={styles.previewOverlay} />
-            <TouchableOpacity style={styles.previewPlayBtn}>
-              <MaterialIcons name="play-arrow" size={28} color="#fff" />
-            </TouchableOpacity>
-            <View style={styles.previewBadgeSafe}>
-              <Text style={styles.previewBadgeSafeText}>SAFE WORK</Text>
-            </View>
+        {/* Step 05 — Mode (Listen / Learn) */}
+        <View style={styles.stepBlock}>
+          <View style={styles.stepLabelRow}>
+            <Text style={styles.stepNumber}>05 /</Text>
+            <Text style={styles.stepLabel}>MODE</Text>
           </View>
-
-          <View style={styles.previewBody}>
-            <View style={styles.previewAiBadge}>
-              <MaterialIcons name="auto-awesome" size={11} color="#0714B8" />
-              <Text style={styles.previewAiBadgeText}>AI USING BRIEF</Text>
-            </View>
-            <Text style={styles.previewTitle}>Visualizing Your Story</Text>
-            <Text style={styles.previewDesc}>
-              Based on your{' '}
-              {selectedCategories.length > 0
-                ? selectedCategories.slice(0, 2).join(' & ')
-                : 'selected category'}{' '}
-              choices, we're pulling the latest papers from today. Your brief will include a summary
-              of the new fusion energy breakthrough.
-            </Text>
-            <View style={styles.previewFooter}>
-              <View style={styles.previewAvatars}>
-                <Image
-                  source={{ uri: 'https://i.pravatar.cc/40?img=47' }}
-                  style={styles.previewAvatar}
-                />
-                <Image
-                  source={{ uri: 'https://i.pravatar.cc/40?img=25' }}
-                  style={[styles.previewAvatar, { marginLeft: -10 }]}
-                />
+          <View style={styles.modeRow}>
+            <TouchableOpacity
+              style={[styles.modeCard, !learningMode && styles.modeCardActive]}
+              onPress={() => setLearningMode(false)}
+              activeOpacity={0.85}>
+              <MaterialIcons
+                name="headset"
+                size={20}
+                color={!learningMode ? '#0714B8' : '#8A8F9A'}
+              />
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.modeLabel, !learningMode && styles.modeLabelActive]}>
+                  Listen only
+                </Text>
+                <Text style={styles.modeDesc}>Standard podcast experience.</Text>
               </View>
-              <Text style={styles.previewVoice}>Neural Voice: "Atlas"</Text>
-            </View>
+              <MaterialIcons
+                name={!learningMode ? 'radio-button-checked' : 'radio-button-unchecked'}
+                size={20}
+                color={!learningMode ? '#0714B8' : '#C2C7D0'}
+              />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.modeCard, learningMode && styles.modeCardActive]}
+              onPress={() => setLearningMode(true)}
+              activeOpacity={0.85}>
+              <MaterialIcons
+                name="school"
+                size={20}
+                color={learningMode ? '#0714B8' : '#8A8F9A'}
+              />
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.modeLabel, learningMode && styles.modeLabelActive]}>
+                  Learn English
+                </Text>
+                <Text style={styles.modeDesc}>
+                  Level-matched script, Turkish subtitles, and vocabulary notebook.
+                </Text>
+              </View>
+              <MaterialIcons
+                name={learningMode ? 'radio-button-checked' : 'radio-button-unchecked'}
+                size={20}
+                color={learningMode ? '#0714B8' : '#C2C7D0'}
+              />
+            </TouchableOpacity>
           </View>
         </View>
+
+        {/* Step 06 — Language Level (learn mode only) */}
+        {learningMode && (
+          <View style={styles.stepBlock}>
+            <View style={styles.stepLabelRow}>
+              <Text style={styles.stepNumber}>06 /</Text>
+              <Text style={styles.stepLabel}>LANGUAGE LEVEL</Text>
+            </View>
+            <View style={styles.durationRow}>
+              {CEFR_LEVELS.map((lvl) => (
+                <TouchableOpacity
+                  key={lvl}
+                  style={[styles.durationBtn, cefrLevel === lvl && styles.durationBtnActive]}
+                  onPress={() => setCefrLevel(lvl)}
+                  activeOpacity={0.8}>
+                  <Text
+                    style={[
+                      styles.durationText,
+                      cefrLevel === lvl && styles.durationTextActive,
+                    ]}>
+                    {lvl}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        )}
+
 
         {/* Generate Button */}
         <TouchableOpacity
@@ -505,6 +594,45 @@ const styles = StyleSheet.create({
     color: '#9EA3AE',
   },
 
+  /* Mode (Listen / Learn) */
+  modeRow: {
+    gap: 10,
+  },
+
+  modeCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+  },
+
+  modeCardActive: {
+    borderColor: '#0714B8',
+    backgroundColor: '#F4F6FF',
+  },
+
+  modeLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#3D4048',
+    marginBottom: 2,
+  },
+
+  modeLabelActive: {
+    color: '#0714B8',
+  },
+
+  modeDesc: {
+    fontSize: 11,
+    color: '#9EA3AE',
+    lineHeight: 15,
+  },
+
   /* Duration */
   durationRow: {
     flexDirection: 'row',
@@ -534,117 +662,6 @@ const styles = StyleSheet.create({
 
   durationTextActive: {
     color: '#FFFFFF',
-  },
-
-  /* Preview card */
-  previewCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 22,
-    overflow: 'hidden',
-    marginBottom: 24,
-    borderWidth: 1,
-    borderColor: '#E8EBF2',
-  },
-
-  previewMedia: {
-    height: 180,
-    position: 'relative',
-  },
-
-  previewImage: {
-    width: '100%',
-    height: '100%',
-  },
-
-  previewOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(10,8,30,0.5)',
-  },
-
-  previewPlayBtn: {
-    position: 'absolute',
-    top: '50%',
-    left: '50%',
-    marginTop: -24,
-    marginLeft: -24,
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: 'rgba(255,255,255,0.25)',
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.6)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  previewBadgeSafe: {
-    position: 'absolute',
-    bottom: 10,
-    left: '50%',
-    marginLeft: -32,
-  },
-
-  previewBadgeSafeText: {
-    fontSize: 9,
-    fontWeight: '800',
-    color: 'rgba(255,255,255,0.5)',
-    letterSpacing: 2,
-  },
-
-  previewBody: {
-    padding: 18,
-  },
-
-  previewAiBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    marginBottom: 8,
-  },
-
-  previewAiBadgeText: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#0714B8',
-    letterSpacing: 1.2,
-  },
-
-  previewTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#111318',
-    marginBottom: 8,
-  },
-
-  previewDesc: {
-    fontSize: 13,
-    color: '#5A5F6A',
-    lineHeight: 20,
-    marginBottom: 14,
-  },
-
-  previewFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-
-  previewAvatars: {
-    flexDirection: 'row',
-  },
-
-  previewAvatar: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
-  },
-
-  previewVoice: {
-    fontSize: 12,
-    color: '#8A8F9A',
-    fontWeight: '500',
   },
 
   /* Generate */

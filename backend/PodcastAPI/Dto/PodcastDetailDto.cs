@@ -15,4 +15,6 @@ public class PodcastDetailDto
     public DateTime CreatedAt { get; set; }
     public List<PodcastSourceDto> Sources { get; set; } = new();
     public List<TranscriptSegmentDto> Transcript { get; set; } = new();
+    public string? CefrLevel { get; set; }
+    public bool LearningMode { get; set; }
 }

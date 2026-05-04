@@ -40,6 +40,39 @@ public class AiServiceClient(HttpClient httpClient, ILogger<AiServiceClient> log
 
         return result;
     }
+
+    public async Task<AiTranslateWordResponse> TranslateWordAsync(
+        AiTranslateWordRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        logger.LogInformation(
+            "ai-service'e kelime çeviri isteği. Word={Word} HasContext={HasContext}",
+            request.Word,
+            !string.IsNullOrWhiteSpace(request.ContextSentence));
+
+        using var response = await httpClient.PostAsJsonAsync(
+            "/internal/translate/word",
+            request,
+            JsonOptions,
+            cancellationToken);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var body = await response.Content.ReadAsStringAsync(cancellationToken);
+            logger.LogError(
+                "ai-service translate/word {StatusCode}. Word={Word} Body={Body}",
+                (int)response.StatusCode, request.Word, body);
+            throw new AiServiceException(
+                $"ai-service çeviri çağrısı başarısız ({(int)response.StatusCode}): {body}");
+        }
+
+        var result = await response.Content.ReadFromJsonAsync<AiTranslateWordResponse>(JsonOptions, cancellationToken);
+        if (result is null)
+        {
+            throw new AiServiceException("ai-service çeviri için boş cevap döndürdü.");
+        }
+        return result;
+    }
 }
 
 public class AiServiceException(string message) : Exception(message);

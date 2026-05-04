@@ -34,7 +34,9 @@ public class PodcastGeneratorJob(
                 Tone = podcast.Tone!,
                 DurationMinutes = request.DurationMinutes,
                 SpeakerCount = request.SpeakerCount,
-                Language = "en"
+                Language = "en",
+                LearningMode = podcast.LearningMode,
+                CefrLevel = podcast.CefrLevel
             });
 
             // Gelen verileri podcast kaydına işle

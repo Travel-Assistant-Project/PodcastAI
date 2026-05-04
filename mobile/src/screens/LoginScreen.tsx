@@ -28,7 +28,7 @@ const LoginScreen = () => {
 
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
-      setErrorMessage('Email ve sifre zorunludur.');
+      setErrorMessage('Email and password are required.');
       return;
     }
 
@@ -46,9 +46,9 @@ const LoginScreen = () => {
       router.replace('/(tabs)');
     } catch (error: any) {
       const backendMessage = error?.response?.data?.message as string | undefined;
-      const message = backendMessage ?? 'Giris basarisiz. Bilgilerini kontrol et.';
+      const message = backendMessage ?? 'Sign-in failed. Check your email and password.';
       setErrorMessage(message);
-      Alert.alert('Giris Hatasi', message);
+      Alert.alert('Sign-in error', message);
     } finally {
       setIsSubmitting(false);
     }
