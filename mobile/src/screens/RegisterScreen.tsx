@@ -32,12 +32,12 @@ const RegisterScreen = () => {
 
   const handleRegister = async () => {
     if (!fullName.trim() || !email.trim() || !password.trim()) {
-      setErrorMessage('Ad soyad, email ve sifre zorunludur.');
+      setErrorMessage('Full name, email, and password are required.');
       return;
     }
 
     if (password !== confirmPassword) {
-      setErrorMessage('Sifreler ayni olmali.');
+      setErrorMessage('Passwords must match.');
       return;
     }
 
@@ -61,11 +61,11 @@ const RegisterScreen = () => {
       const message =
         backendMessage ??
         (statusCode
-          ? `Kayit olusturulamadi (HTTP ${statusCode}).`
-          : 'Kayit olusturulamadi. Ag baglantisini kontrol et.');
+          ? `Could not create account (HTTP ${statusCode}).`
+          : 'Could not create account. Check your network connection.');
 
       setErrorMessage(message);
-      Alert.alert('Kayit Hatasi', message);
+      Alert.alert('Registration error', message);
     } finally {
       setIsSubmitting(false);
     }

@@ -28,6 +28,29 @@ _LANGUAGE_NAMES: dict[str, str] = {
     "tr": "Turkish",
 }
 
+_CEFR_GUIDELINES: dict[str, str] = {
+    "A1": (
+        "CEFR A1 (Beginner): Use ONLY the ~500 most common English words. "
+        "Very short sentences (max 8 words). Present simple tense. "
+        "No idioms, no phrasal verbs, no slang. Repeat key vocabulary."
+    ),
+    "A2": (
+        "CEFR A2 (Elementary): Common everyday vocabulary. "
+        "Short, simple sentences (max 12 words). Mostly present and past simple. "
+        "Avoid idioms; explain any uncommon word in context."
+    ),
+    "B1": (
+        "CEFR B1 (Intermediate): Intermediate vocabulary. Clear sentences (max 18 words). "
+        "Phrasal verbs are fine but used in clear context. Limited idiomatic language."
+    ),
+    "B2": (
+        "CEFR B2 (Upper-intermediate): Natural pace. Idioms allowed but not slang. "
+        "Complex sentences are fine, but keep them readable."
+    ),
+    "C1": "CEFR C1 (Advanced): Nuanced vocabulary, varied syntax, idioms welcome.",
+    "C2": "CEFR C2 (Proficient): Native-like; full register flexibility.",
+}
+
 
 async def generate_dialog_script(
     news: list[NewsSource],
@@ -35,6 +58,7 @@ async def generate_dialog_script(
     duration_minutes: int,
     speaker_count: int,
     language: str = "en",
+    cefr_level: str | None = None,
 ) -> str:
     if settings.MOCK_SCRIPT:
         return _mock_script(news, tone, duration_minutes, speaker_count, language)
@@ -42,7 +66,9 @@ async def generate_dialog_script(
     if not settings.OPENROUTER_API_KEY:
         raise RuntimeError("OPENROUTER_API_KEY ayarlanmamış.")
 
-    system_prompt = _build_system_prompt(tone, duration_minutes, speaker_count, language)
+    system_prompt = _build_system_prompt(
+        tone, duration_minutes, speaker_count, language, cefr_level
+    )
     user_prompt = _build_user_prompt(news, duration_minutes, language)
     target_words = duration_minutes * _WORDS_PER_MINUTE
     # ~1.3 token / EN kelime + biraz marj
@@ -89,7 +115,11 @@ async def generate_dialog_script(
 
 
 def _build_system_prompt(
-    tone: str, duration_minutes: int, speaker_count: int, language: str
+    tone: str,
+    duration_minutes: int,
+    speaker_count: int,
+    language: str,
+    cefr_level: str | None = None,
 ) -> str:
     tone_rule = _TONE_GUIDELINES.get(tone.lower(), _TONE_GUIDELINES["casual"])
     target_words = duration_minutes * _WORDS_PER_MINUTE
@@ -107,12 +137,23 @@ def _build_system_prompt(
             "Every line MUST start with [HOST1]:."
         )
 
+    cefr_rule = ""
+    if cefr_level:
+        guideline = _CEFR_GUIDELINES.get(cefr_level.upper())
+        if guideline:
+            cefr_rule = (
+                f"\nLanguage level: {guideline} "
+                "The script will be used for English language learning, "
+                "so vocabulary and sentence complexity MUST stay within this level."
+            )
+
     return (
         f"You are a professional {lang_name} podcast scriptwriter.\n"
         f"{speaker_rule}\n"
         f"Tone: {tone_rule}\n"
         f"Target length: {duration_minutes} minutes (~{target_words} words).\n"
-        f"The entire script MUST be written in {lang_name}.\n"
+        f"The entire script MUST be written in {lang_name}."
+        f"{cefr_rule}\n"
         "Rules:\n"
         "- Output ONLY the script text; no intro, no title, no markdown, no emoji.\n"
         "- Comment on the supplied news items; do NOT invent facts, numbers, or sources.\n"
