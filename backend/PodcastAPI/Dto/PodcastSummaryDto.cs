@@ -9,4 +9,6 @@ public class PodcastSummaryDto
     public string? Status { get; set; }
     public List<string> Categories { get; set; } = new();
     public DateTime CreatedAt { get; set; }
+    public bool LearningMode { get; set; }
+    public string? CefrLevel { get; set; }
 }

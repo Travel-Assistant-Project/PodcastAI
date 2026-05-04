@@ -15,6 +15,10 @@ public class Podcast
     // MVP: birden fazla kategori virgülle ayrılarak tutulur (ör. "teknoloji,spor").
     public string? CategoryName { get; set; }
 
+    public string? CefrLevel { get; set; }
+
+    public bool LearningMode { get; set; }
+
     // Zaman damgalı transcript (List<TranscriptSegmentDto> JSON serialize edilerek tutulur).
     // Postgres'te jsonb kolonu; null ise henüz üretilmemiş demektir.
     public string? TranscriptJson { get; set; }

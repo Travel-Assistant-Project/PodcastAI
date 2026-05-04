@@ -14,6 +14,8 @@ class GeneratePodcastRequest(BaseModel):
     durationMinutes: int
     speakerCount: int
     language: str = "en"
+    learningMode: bool = False
+    cefrLevel: Optional[str] = None  # 'A1'..'C2'
 
 
 class NewsSource(BaseModel):
@@ -31,6 +33,22 @@ class TranscriptSegment(BaseModel):
     text: str
     startMs: int
     endMs: int
+    textTr: Optional[str] = None
+
+
+class TranslateWordRequest(BaseModel):
+    word: str
+    contextSentence: Optional[str] = None
+    sourceLang: str = "en"
+    targetLang: str = "tr"
+
+
+class TranslateWordResponse(BaseModel):
+    word: str
+    translation: str
+    partOfSpeech: Optional[str] = None
+    exampleEn: Optional[str] = None
+    exampleTr: Optional[str] = None
 
 
 class GeneratePodcastResponse(BaseModel):

@@ -21,7 +21,7 @@ export default function ProfileScreen() {
   const router = useRouter();
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const user = getUser();
-  const fullName = user?.fullName ?? 'Kullanıcı';
+  const fullName = user?.fullName ?? 'User';
   const email = user?.email ?? '';
 
   const handleSignOut = () => {
@@ -103,6 +103,47 @@ export default function ProfileScreen() {
                 </Text>
               </View>
             ))}
+          </View>
+        </View>
+
+        {/* Learning */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Learning</Text>
+
+          <View style={styles.preferenceList}>
+            <TouchableOpacity
+              style={styles.preferenceRow}
+              activeOpacity={0.75}
+              onPress={() => router.push('/words')}>
+              <View style={[styles.prefIconWrap, { backgroundColor: '#EEF1FF' }]}>
+                <MaterialIcons name="bookmark" size={20} color="#0714B8" />
+              </View>
+              <View style={styles.prefContent}>
+                <Text style={styles.prefTitle}>Vocabulary notebook</Text>
+                <Text style={styles.prefSub}>
+                  Words you save from learning-mode episodes and your progress
+                </Text>
+              </View>
+              <MaterialIcons name="chevron-right" size={22} color="#C2C7D0" />
+            </TouchableOpacity>
+
+            <View style={styles.separator} />
+
+            <TouchableOpacity
+              style={styles.preferenceRow}
+              activeOpacity={0.75}
+              onPress={() => router.push('/past-podcasts')}>
+              <View style={[styles.prefIconWrap, { backgroundColor: '#F0F3FF' }]}>
+                <MaterialIcons name="history" size={20} color="#0714B8" />
+              </View>
+              <View style={styles.prefContent}>
+                <Text style={styles.prefTitle}>Past episodes</Text>
+                <Text style={styles.prefSub}>
+                  Open and play podcasts you have already created
+                </Text>
+              </View>
+              <MaterialIcons name="chevron-right" size={22} color="#C2C7D0" />
+            </TouchableOpacity>
           </View>
         </View>
 

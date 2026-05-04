@@ -18,6 +18,8 @@ export type AuthResponse = {
   fullName: string;
   email: string;
   token: string;
+  preferredMode?: 'listen' | 'learn' | null;
+  cefrLevel?: string | null;
 };
 
 export async function login(payload: LoginRequest) {

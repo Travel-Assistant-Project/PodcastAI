@@ -28,4 +28,16 @@ public class AiTranscriptSegment
     public string Text { get; set; } = string.Empty;
     public int StartMs { get; set; }
     public int EndMs { get; set; }
+    // Öğrenme modunda satırın hedef dile (Türkçe) çevirisi; aksi halde NULL.
+    public string? TextTr { get; set; }
+}
+
+// /internal/translate/word cevabı.
+public class AiTranslateWordResponse
+{
+    public string Word { get; set; } = string.Empty;
+    public string Translation { get; set; } = string.Empty;
+    public string? PartOfSpeech { get; set; }
+    public string? ExampleEn { get; set; }
+    public string? ExampleTr { get; set; }
 }

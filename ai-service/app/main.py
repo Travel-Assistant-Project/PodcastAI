@@ -4,6 +4,7 @@ from fastapi import FastAPI
 
 from .routers import news as news_router
 from .routers import podcast as podcast_router
+from .routers import translate as translate_router
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s - %(message)s")
 
@@ -26,3 +27,4 @@ def health() -> dict[str, str]:
 
 app.include_router(podcast_router.router)
 app.include_router(news_router.router)
+app.include_router(translate_router.router)

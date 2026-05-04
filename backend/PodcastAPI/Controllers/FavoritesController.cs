@@ -33,7 +33,9 @@ public class FavoritesController(AppDbContext db) : ControllerBase
                 CreatedAt = f.Podcast.CreatedAt,
                 Categories = string.IsNullOrWhiteSpace(f.Podcast.CategoryName)
                     ? new List<string>()
-                    : f.Podcast.CategoryName.Split(',', StringSplitOptions.None).ToList()
+                    : f.Podcast.CategoryName.Split(',', StringSplitOptions.None).ToList(),
+                LearningMode = f.Podcast.LearningMode,
+                CefrLevel = f.Podcast.CefrLevel
             })
             .ToListAsync();
 
