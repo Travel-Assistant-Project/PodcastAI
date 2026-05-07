@@ -21,40 +21,6 @@ public class LearningController(
     IAiServiceClient aiServiceClient,
     ILogger<LearningController> logger) : ControllerBase
 {
-    [HttpPost("onboarding")]
-    public async Task<IActionResult> Onboarding([FromBody] OnboardingDto dto)
-    {
-        if (!TryGetUserId(out var userId)) return Unauthorized(new { message = "Invalid token." });
-
-        if (string.IsNullOrWhiteSpace(dto.PreferredMode)
-            || !LearningConstants.Mode.Allowed.Contains(dto.PreferredMode))
-        {
-            return BadRequest(new { message = "PreferredMode 'listen' veya 'learn' olmalı." });
-        }
-
-        var mode = dto.PreferredMode.ToLowerInvariant();
-        string? cefr = null;
-
-        if (mode == LearningConstants.Mode.Learn)
-        {
-            if (string.IsNullOrWhiteSpace(dto.CefrLevel)
-                || !LearningConstants.AllowedCefrLevels.Contains(dto.CefrLevel))
-            {
-                return BadRequest(new { message = "Öğrenme modunda CefrLevel zorunlu (A1..C2)." });
-            }
-            cefr = dto.CefrLevel.ToUpperInvariant();
-        }
-
-        var user = await db.Users.FirstOrDefaultAsync(u => u.Id == userId);
-        if (user == null) return Unauthorized();
-
-        user.PreferredMode = mode;
-        user.CefrLevel = cefr;
-        await db.SaveChangesAsync();
-
-        return Ok(new { preferredMode = user.PreferredMode, cefrLevel = user.CefrLevel });
-    }
-
     [HttpPost("translate-word")]
     public async Task<ActionResult<TranslateWordResponseDto>> TranslateWord([FromBody] TranslateWordRequestDto dto)
     {
@@ -252,7 +218,6 @@ public class LearningController(
             .Where(p => p.UserId == userId && p.LearningMode && p.Status == PodcastConstants.Status.Completed)
             .Select(p => p.DurationSeconds ?? 0)
             .SumAsync();
-        var user = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId);
 
         return Ok(new LearningProgressDto
         {
@@ -260,7 +225,6 @@ public class LearningController(
             LearnedWords = learnedWords,
             LearningPodcastsCount = learningPodcasts,
             TotalListenSeconds = totalSeconds,
-            CefrLevel = user?.CefrLevel,
         });
     }
 
