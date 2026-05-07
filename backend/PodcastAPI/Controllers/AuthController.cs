@@ -53,8 +53,6 @@ public class AuthController(
             FullName = user.FullName,
             Email = user.Email,
             Token = token,
-            PreferredMode = user.PreferredMode,
-            CefrLevel = user.CefrLevel,
         });
     }
 
@@ -82,8 +80,6 @@ public class AuthController(
             FullName = user.FullName,
             Email = user.Email,
             Token = token,
-            PreferredMode = user.PreferredMode,
-            CefrLevel = user.CefrLevel,
         });
     }
 }
