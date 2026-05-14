@@ -6,6 +6,7 @@ import io
 import re
 from logging import getLogger
 from pathlib import Path
+from typing import List, Optional
 
 import httpx
 from pydub import AudioSegment
@@ -147,7 +148,7 @@ def _parse_script(script_text: str, speaker_count: int) -> list[tuple[str, str, 
 async def _synthesize_all(segments: list[tuple[str, str]]) -> list[bytes]:
     """Satırları paralel (sınırlı eşzamanlılık) TTS'le."""
     semaphore = asyncio.Semaphore(_TTS_CONCURRENCY)
-    results: list[bytes | None] = [None] * len(segments)
+    results: List[Optional[bytes]] = [None] * len(segments)
 
     async with httpx.AsyncClient(timeout=120.0) as client:
         async def worker(i: int, voice_id: str, text: str) -> None:
@@ -200,7 +201,7 @@ async def _tts_one(client: httpx.AsyncClient, voice_id: str, text: str) -> bytes
         },
     }
 
-    last_error: str | None = None
+    last_error: Optional[str] = None
     for attempt in range(_TTS_RETRIES):
         resp = await client.post(url, json=payload, headers=headers)
         if resp.status_code == 200:
