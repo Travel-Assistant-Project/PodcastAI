@@ -7,6 +7,7 @@ using PodcastAPI.Data;
 using PodcastAPI.Dto;
 using PodcastAPI.Models;
 using PodcastAPI.Services;
+using PodcastAPI.Services.External;
 using System.Security.Claims;
 using System.Text.Json;
 
@@ -17,16 +18,17 @@ namespace PodcastAPI.Controllers;
 [Authorize]
 public class PodcastsController(
     AppDbContext db,
-    IBackgroundJobClient backgroundJobClient) : ControllerBase
+    IBackgroundJobClient backgroundJobClient,
+    IExternalPodcastService externalPodcastService) : ControllerBase
 {
     private static readonly JsonSerializerOptions TranscriptJsonOptions = new(JsonSerializerDefaults.Web);
 
+    // POST: api/podcasts/generate - Kendi AI Podcast'ini üretir
     [HttpPost("generate")]
     public async Task<ActionResult> Generate([FromBody] GeneratePodcastRequestDto request)
     {
         if (!TryGetUserId(out var userId)) return Unauthorized(new { message = "Invalid token." });
 
-        // İlk kaydı oluştur ve durumu 'processing'e çek
         var podcast = new Podcast
         {
             Id = Guid.NewGuid(),
@@ -45,13 +47,12 @@ public class PodcastsController(
         db.Podcasts.Add(podcast);
         await db.SaveChangesAsync();
 
-        // İşi Hangfire kuyruğuna ekle (Fire-and-Forget)
         backgroundJobClient.Enqueue<IPodcastGeneratorJob>(job => job.RunAsync(podcast.Id, request));
 
-        // Kullanıcıya hemen cevap dön
         return Accepted(new { podcastId = podcast.Id, status = podcast.Status });
     }
 
+    // GET: api/podcasts/{id} - Podcast detayını getirir
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<PodcastDetailDto>> GetById(Guid id)
     {
@@ -64,6 +65,7 @@ public class PodcastsController(
         return Ok(ToDetailDto(podcast));
     }
 
+    // GET: api/podcasts - Kullanıcının kendi ürettiği podcastleri listeler
     [HttpGet]
     public async Task<ActionResult<List<PodcastSummaryDto>>> GetAll()
     {
@@ -90,6 +92,36 @@ public class PodcastsController(
             .ToListAsync();
 
         return Ok(podcasts);
+    }
+
+    // GET: api/podcasts/external/trending - Listen Notes üzerindeki popüler podcastleri getirir
+    [HttpGet("external/trending")]
+    public async Task<ActionResult<List<PodcastSummaryDto>>> GetExternalTrending([FromQuery] string? genreId)
+    {
+        var podcasts = await externalPodcastService.GetBestPodcastsAsync(genreId);
+        return Ok(podcasts);
+    }
+
+    // GET: api/podcasts/external/recommended - Kullanıcının ilgi alanlarına göre dış API'dan tavsiye getirir
+    [HttpGet("external/recommended")]
+    public async Task<ActionResult<List<PodcastSummaryDto>>> GetExternalRecommended()
+    {
+        if (!TryGetUserId(out var userId)) return Unauthorized(new { message = "Invalid token." });
+
+        // Kullanıcının ilgi alanlarını DB'den isim olarak çekiyoruz
+        var userInterests = await db.UserInterests
+            .Where(ui => ui.UserId == userId)
+            .Join(db.Interests, ui => ui.InterestId, i => i.Id, (ui, i) => i.Name)
+            .ToListAsync();
+
+        if (!userInterests.Any())
+        {
+            // İlgi alanı yoksa genel trendleri döndür
+            return Ok(await externalPodcastService.GetBestPodcastsAsync(null));
+        }
+
+        var recommendations = await externalPodcastService.SearchByInterestsAsync(userInterests);
+        return Ok(recommendations);
     }
 
     private bool TryGetUserId(out Guid userId)
