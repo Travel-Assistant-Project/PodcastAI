@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from logging import getLogger
+from typing import Optional
 
 import httpx
 
@@ -58,7 +59,7 @@ async def generate_dialog_script(
     duration_minutes: int,
     speaker_count: int,
     language: str = "en",
-    cefr_level: str | None = None,
+    cefr_level: Optional[str] = None,
 ) -> str:
     if settings.MOCK_SCRIPT:
         return _mock_script(news, tone, duration_minutes, speaker_count, language)
@@ -119,7 +120,7 @@ def _build_system_prompt(
     duration_minutes: int,
     speaker_count: int,
     language: str,
-    cefr_level: str | None = None,
+    cefr_level: Optional[str] = None,
 ) -> str:
     tone_rule = _TONE_GUIDELINES.get(tone.lower(), _TONE_GUIDELINES["casual"])
     target_words = duration_minutes * _WORDS_PER_MINUTE

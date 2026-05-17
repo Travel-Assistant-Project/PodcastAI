@@ -31,12 +31,20 @@ export default function MiniPlayerBar() {
   const insets = useSafeAreaInsets();
   const playback = usePlayback();
 
+  const AUTH_PATHS = new Set(['/', '/login', '/register']);
+  const isAuthScreen =
+    AUTH_PATHS.has(pathname) ||
+    segments[0] === 'index' ||
+    segments[0] === 'login' ||
+    segments[0] === 'register';
+
   const hide = useMemo(() => {
     if (!playback.track) return true;
+    if (isAuthScreen) return true;
     if (segments[0] === 'player') return true;
     if (pathname === '/player') return true;
     return false;
-  }, [playback.track, segments, pathname]);
+  }, [playback.track, isAuthScreen, segments, pathname]);
 
   const bottomOffset = useMemo(() => {
     const inTabs = segments[0] === '(tabs)';

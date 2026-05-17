@@ -10,3 +10,8 @@ export async function getInterests() {
   const { data } = await api.get<Interest[]>('/api/interests');
   return data;
 }
+
+export async function getMyInterests() {
+  const { data } = await api.get<Interest[]>('/api/interests/my');
+  return data;
+}

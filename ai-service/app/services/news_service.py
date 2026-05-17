@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from logging import getLogger
-from typing import Any
+from typing import Any, Optional
 
 import httpx
 
@@ -45,7 +45,7 @@ _LANGUAGE_TO_TOP_COUNTRY: dict[str, str] = {
 async def fetch_headlines(
     categories: list[str],
     language: str = "en",
-    limit_per_category: int | None = None,
+    limit_per_category: Optional[int] = None,
 ) -> list[NewsSource]:
     """Seçilen kategorilere göre NewsAPI'den haber döndürür.
 
@@ -138,7 +138,7 @@ def _to_news_source(article: dict[str, Any]) -> NewsSource:
     )
 
 
-def _parse_dt(value: str | None) -> datetime | None:
+def _parse_dt(value: Optional[str]) -> Optional[datetime]:
     if not value:
         return None
     try:

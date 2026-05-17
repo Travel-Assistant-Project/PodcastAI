@@ -90,3 +90,20 @@ CREATE TABLE IF NOT EXISTS userquizattempts (
 -- 07.05.2026: preferredmode / cefrlevel users'dan kaldırıldı (sadece podcast bazında).
 ALTER TABLE users DROP COLUMN IF EXISTS preferredmode;
 ALTER TABLE users DROP COLUMN IF EXISTS cefrlevel;
+
+-- 16.05.2026: Profil fotoğrafı URL'i.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS photourl TEXT;
+
+-- 16.05.2026: Dinleme geçmişi (Recently Played + "kaldığı yer" takibi).
+-- Kullanıcının hangi podcast'i, ne kadar dinlediğini ve tamamlayıp tamamlamadığını tutar.
+CREATE TABLE IF NOT EXISTS listeninghistory (
+    id              SERIAL PRIMARY KEY,
+    userid          UUID         NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    podcastid       UUID         NOT NULL REFERENCES podcasts(id) ON DELETE CASCADE,
+    progressseconds INT          NOT NULL DEFAULT 0,
+    iscompleted     BOOLEAN      NOT NULL DEFAULT FALSE,
+    lastlistenedat  TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(userid, podcastid)
+);
+
+CREATE INDEX IF NOT EXISTS idx_listeninghistory_user ON listeninghistory(userid, lastlistenedat DESC);

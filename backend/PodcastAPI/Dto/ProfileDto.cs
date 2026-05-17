@@ -22,5 +22,6 @@ public class ProfileDto
     public string Email { get; set; } = string.Empty;
     public int? Age { get; set; }
     public string? Occupation { get; set; }
+    public string? PhotoUrl { get; set; }
     public DateTime CreatedAt { get; set; }
 }
