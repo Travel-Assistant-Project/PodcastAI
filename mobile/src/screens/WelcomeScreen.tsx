@@ -1,16 +1,9 @@
 import { useRouter } from 'expo-router';
 import React from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  Image,
-  Dimensions,
-} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-const { width, height } = Dimensions.get('window');
+const { width } = Dimensions.get('window');
 
 const WelcomeScreen = () => {
   const router = useRouter();
@@ -35,24 +28,19 @@ const WelcomeScreen = () => {
           <View style={styles.podcastCard}>
             <View style={styles.waveRow}>
               {[18, 28, 38, 52, 44, 60, 44, 52, 38, 28, 18].map((h, i) => (
-                <View key={i} style={[styles.waveBar, { height: h }]} />
+                <View key={`wave-${i}-${h}`} style={[styles.waveBar, { height: h }]} />
               ))}
             </View>
             <Text style={styles.cardLabel}>Daily Digest</Text>
-            <Text style={styles.cardSub}>AI · 24 min</Text>
           </View>
         </View>
 
         <View style={styles.statsRow}>
-          <View style={styles.statBubble}>
-            <Text style={styles.statValue}>12K+</Text>
-            <Text style={styles.statLabel}>Podcasts</Text>
-          </View>
-          <View style={[styles.statBubble, styles.statBubbleAccent]}>
+          <View style={[styles.statBubble, styles.statBubbleAccent, styles.statBubbleHalf]}>
             <Text style={[styles.statValue, { color: '#fff' }]}>AI</Text>
             <Text style={[styles.statLabel, { color: '#c7d0ff' }]}>Powered</Text>
           </View>
-          <View style={styles.statBubble}>
+          <View style={[styles.statBubble, styles.statBubbleHalf]}>
             <Text style={styles.statValue}>∞</Text>
             <Text style={styles.statLabel}>Topics</Text>
           </View>
@@ -123,8 +111,8 @@ const styles = StyleSheet.create({
   logoRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 18,
-    marginBottom: 28,
+    marginTop: 8,
+    marginBottom: 20,
   },
 
   logoIcon: {
@@ -142,16 +130,16 @@ const styles = StyleSheet.create({
 
   illustrationContainer: {
     alignItems: 'center',
-    marginBottom: 36,
+    marginBottom: 28,
   },
 
   cardStack: {
     width: width - 80,
-    height: 160,
+    height: 148,
     position: 'relative',
     alignItems: 'center',
     justifyContent: 'flex-end',
-    marginBottom: 24,
+    marginBottom: 18,
   },
 
   podcastCard: {
@@ -187,7 +175,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    marginBottom: 12,
+    marginBottom: 10,
   },
 
   waveBar: {
@@ -203,19 +191,14 @@ const styles = StyleSheet.create({
     color: '#111318',
   },
 
-  cardSub: {
-    fontSize: 13,
-    color: '#7D828C',
-    marginTop: 3,
-  },
-
   statsRow: {
     flexDirection: 'row',
-    gap: 14,
+    gap: 12,
+    width: width - 80,
+    justifyContent: 'center',
   },
 
   statBubble: {
-    flex: 1,
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
     paddingVertical: 14,
@@ -229,6 +212,11 @@ const styles = StyleSheet.create({
 
   statBubbleAccent: {
     backgroundColor: '#0714B8',
+  },
+
+  statBubbleHalf: {
+    flex: 1,
+    maxWidth: (width - 80 - 12) / 2,
   },
 
   statValue: {
@@ -248,29 +236,32 @@ const styles = StyleSheet.create({
   headlineContainer: {
     flex: 1,
     justifyContent: 'center',
+    paddingVertical: 8,
+    minHeight: 120,
   },
 
   headline: {
-    fontSize: 38,
+    fontSize: 32,
     fontWeight: '800',
     color: '#111318',
-    lineHeight: 46,
-    marginBottom: 14,
+    lineHeight: 40,
+    marginBottom: 10,
+    letterSpacing: -0.3,
   },
 
   subheadline: {
-    fontSize: 16,
+    fontSize: 15,
     color: '#5A5F6A',
-    lineHeight: 24,
+    lineHeight: 22,
   },
 
   buttonsContainer: {
-    gap: 14,
-    marginBottom: 16,
+    gap: 12,
+    marginBottom: 12,
   },
 
   signInButton: {
-    height: 64,
+    height: 56,
     borderRadius: 18,
     backgroundColor: '#0714B8',
     alignItems: 'center',
@@ -284,13 +275,13 @@ const styles = StyleSheet.create({
 
   signInText: {
     color: '#FFFFFF',
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '800',
-    letterSpacing: 0.5,
+    letterSpacing: 0.3,
   },
 
   signUpButton: {
-    height: 64,
+    height: 56,
     borderRadius: 18,
     backgroundColor: '#FFFFFF',
     alignItems: 'center',
@@ -306,16 +297,16 @@ const styles = StyleSheet.create({
 
   signUpText: {
     color: '#111318',
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '700',
-    letterSpacing: 0.3,
+    letterSpacing: 0.2,
   },
 
   footer: {
     textAlign: 'center',
     color: '#9EA3AE',
     fontSize: 11,
-    letterSpacing: 3,
-    marginBottom: 8,
+    letterSpacing: 2,
+    marginBottom: 4,
   },
 });

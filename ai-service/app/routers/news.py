@@ -1,4 +1,7 @@
 """NewsAPI'yi izole test etmek için yardımcı endpoint."""
+
+from typing import Optional
+
 from fastapi import APIRouter, Depends, Query
 
 from ..schemas import NewsSource
@@ -16,7 +19,7 @@ router = APIRouter(
 async def preview(
     categories: str = Query(..., description="Virgülle ayrılmış kategori listesi"),
     language: str = Query("tr"),
-    limit: int | None = Query(None, ge=1, le=20),
+    limit: Optional[int] = Query(None, ge=1, le=20),
 ) -> list[NewsSource]:
     cats = [c.strip() for c in categories.split(",") if c.strip()]
     return await news_service.fetch_headlines(

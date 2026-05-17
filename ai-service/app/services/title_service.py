@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import re
 from logging import getLogger
+from typing import Optional
 
 import httpx
 
@@ -51,7 +52,7 @@ async def generate_episode_title(
     tone: str,
     language: str,
     script_preview: str,
-) -> str | None:
+) -> Optional[str]:
     if not settings.OPENROUTER_API_KEY:
         return None
 

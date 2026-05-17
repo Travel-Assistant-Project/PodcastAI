@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 import threading
 from pathlib import Path
+from typing import Optional
 from uuid import UUID
 
 from ..config import settings
@@ -100,7 +101,7 @@ def cleanup_local_file(local_path: Path) -> None:
         logger.warning("Local mp3 silinemedi (%s): %s", local_path, exc)
 
 
-def public_url_for(podcast_id: UUID, local_path: Path | None = None) -> str:
+def public_url_for(podcast_id: UUID, local_path: Optional[Path] = None) -> str:
     """Konfigürasyona göre Firebase veya local URL döndürür.
 
     - USE_FIREBASE_STORAGE=true: local dosyayı upload eder, sonra siler, Firebase URL'ini döner.

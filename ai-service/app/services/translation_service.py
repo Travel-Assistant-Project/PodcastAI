@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import re
 from logging import getLogger
+from typing import List, Optional
 
 import httpx
 
@@ -105,7 +106,7 @@ async def translate_segments(
 
     # Önce indeksli eşleştirmeyi dene; LLM "i" anahtarını göz ardı ettiyse positional eşleştir.
     by_index: dict[int, str] = {}
-    positional: list[str | None] = []
+    positional: List[Optional[str]] = []
 
     for item in items:
         if not isinstance(item, dict):
@@ -158,7 +159,7 @@ async def translate_segments(
 
 async def translate_word(
     word: str,
-    context_sentence: str | None = None,
+    context_sentence: Optional[str] = None,
     source_lang: str = "en",
     target_lang: str = "tr",
 ) -> TranslateWordResponse:
