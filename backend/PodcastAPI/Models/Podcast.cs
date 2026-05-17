@@ -15,6 +15,8 @@ public class Podcast
     // MVP: birden fazla kategori virgülle ayrılarak tutulur (ör. "teknoloji,spor").
     public string? CategoryName { get; set; }
 
+    public string? CoverImageObjectKey { get; set; }
+
     public string? CefrLevel { get; set; }
 
     public bool LearningMode { get; set; }
@@ -24,6 +26,9 @@ public class Podcast
     public string? TranscriptJson { get; set; }
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+    /// <summary>Son başarısız üretim zamanı (Hangfire/job catch); ana sayfa hero 5 dk kuralı için.</summary>
+    public DateTime? FailedAt { get; set; }
 
     public List<PodcastSource> Sources { get; set; } = new();
 }

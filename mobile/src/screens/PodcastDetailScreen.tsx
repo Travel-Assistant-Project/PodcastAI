@@ -14,6 +14,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 
 import {
+  getListenNotesPodcastDetail,
   getPodcastById,
   type PodcastDetail,
   type TranscriptSegment,
@@ -29,17 +30,25 @@ const POLL_INTERVAL_MS = 4000;
 export default function PodcastDetailScreen() {
   const router = useRouter();
   const playback = usePlayback();
-  const params = useLocalSearchParams<{ id?: string; openTranscript?: string }>();
-  const podcastId = typeof params.id === 'string' ? params.id : undefined;
-  const openTranscriptFromPlayer =
-    params.openTranscript === '1' || params.openTranscript === 'true';
+  const params = useLocalSearchParams<{ id?: string; lnId?: string; lnEpisodeId?: string }>();
+  const lnRaw = typeof params.lnId === 'string' ? params.lnId.trim() : '';
+  const idRaw = typeof params.id === 'string' ? params.id.trim() : '';
+  const lnEpisodeRaw =
+    typeof params.lnEpisodeId === 'string' ? params.lnEpisodeId.trim() : '';
+  const listenNotesPodcastId = lnRaw.length > 0 ? lnRaw : undefined;
+  const podcastId = listenNotesPodcastId ? undefined : idRaw.length > 0 ? idRaw : undefined;
+  const listenNotesEpisodeId = lnEpisodeRaw.length > 0 ? lnEpisodeRaw : undefined;
+
+  const routeEpisodeKey = [listenNotesPodcastId ?? '', podcastId ?? '', listenNotesEpisodeId ?? ''].join(
+    '|',
+  );
 
   const [podcast, setPodcast] = useState<PodcastDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Ses (mp3) hazır olduktan sonra kullanıcı transcript'i açabilir; ilk yüklemede kapalı.
-  const [showTranscript, setShowTranscript] = useState(false);
+  // Transcript bölümü varsayılan olarak açık; yeni podcast sayfasına geçince sıfırlanır.
+  const [showTranscript, setShowTranscript] = useState(true);
   const [showAllTr, setShowAllTr] = useState(false);
   const [perLineTr, setPerLineTr] = useState<Record<number, boolean>>({});
 
@@ -54,13 +63,15 @@ export default function PodcastDetailScreen() {
   const [refreshing, setRefreshing] = useState(false);
 
   const fetchOnce = useCallback(async () => {
-    if (!podcastId) return null;
-    return getPodcastById(podcastId);
-  }, [podcastId]);
+    if (listenNotesPodcastId)
+      return getListenNotesPodcastDetail(listenNotesPodcastId, listenNotesEpisodeId);
+    if (podcastId) return getPodcastById(podcastId);
+    return null;
+  }, [listenNotesPodcastId, podcastId, listenNotesEpisodeId]);
 
-  // Podcast'i çek; processing ise polling.
+  // Podcast'i çek; processing ise polling (yalnızca kendi AI bölümleri).
   useEffect(() => {
-    if (!podcastId) {
+    if (!listenNotesPodcastId && !podcastId) {
       setError('Invalid podcast id.');
       setLoading(false);
       return;
@@ -72,11 +83,16 @@ export default function PodcastDetailScreen() {
     const load = async (initial: boolean) => {
       try {
         if (initial) setLoading(true);
-        const data = await getPodcastById(podcastId);
+        const data = listenNotesPodcastId
+          ? await getListenNotesPodcastDetail(listenNotesPodcastId, listenNotesEpisodeId)
+          : await getPodcastById(podcastId!);
         if (cancelled) return;
         setPodcast(data);
         setError(null);
-        if (data.status === 'processing' || data.status === 'pending') {
+        if (
+          !listenNotesPodcastId &&
+          (data.status === 'processing' || data.status === 'pending')
+        ) {
           timer = setTimeout(() => load(false), POLL_INTERVAL_MS);
         }
       } catch (e: any) {
@@ -93,14 +109,14 @@ export default function PodcastDetailScreen() {
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [podcastId]);
+  }, [listenNotesPodcastId, podcastId, listenNotesEpisodeId]);
 
-  // Yeni podcast sayfasına geçince transcript tekrar kapalı başlasın; oynatıcıdan ?openTranscript=1 ile gelindiyse aç.
+  // Yeni podcast detayına geçince transcript tekrar açık başlasın.
   useEffect(() => {
     setShowAllTr(false);
     setPerLineTr({});
-    if (!openTranscriptFromPlayer) setShowTranscript(false);
-  }, [podcastId, openTranscriptFromPlayer]);
+    setShowTranscript(true);
+  }, [routeEpisodeKey]);
 
   const handleManualRefresh = useCallback(async () => {
     if (refreshing) return;
@@ -133,13 +149,6 @@ export default function PodcastDetailScreen() {
 
   const audioReady = Boolean(podcast?.audioUrl?.trim());
   const canUseTranscript = audioReady && !isFailedStatus;
-
-  useEffect(() => {
-    if (!openTranscriptFromPlayer) return;
-    if (!podcastId) return;
-    if (!audioReady || isFailedStatus) return;
-    setShowTranscript(true);
-  }, [openTranscriptFromPlayer, podcastId, audioReady, isFailedStatus]);
 
   const trAvailable = useMemo(
     () => transcript.some((s) => !!s.textTr),
@@ -205,6 +214,13 @@ export default function PodcastDetailScreen() {
 
   const listenEnabled = audioReady && !isFailed;
 
+  const scriptPreviewText = podcast.scriptText?.trim() ?? '';
+  const hasScriptPreview = scriptPreviewText.length > 0 && !isFailed;
+  const hasTimedTranscript = transcript.length > 0;
+  /** Senaryo geldi ama henüz zamanlı transcript veya ses tamamlanmadı — kullanıcı metni okuyabilsin */
+  const showScriptPreviewPanel =
+    hasScriptPreview && !(audioReady && hasTimedTranscript);
+
   /** Arka planda mini player açıkken içerik listen + mini altında kalmasın */
   const scrollBottomPad = 110 + (playback.track ? 92 : 0);
 
@@ -250,7 +266,10 @@ export default function PodcastDetailScreen() {
         </View>
 
         <View style={styles.tagsRow}>
-          {(podcast.categories ?? []).slice(0, 4).map((tag) => (
+          {(podcast.categories ?? [])
+            .filter((tag) => tag.trim().toLowerCase() !== 'podcast')
+            .slice(0, 4)
+            .map((tag) => (
             <View key={tag} style={styles.tag}>
               <Text style={styles.tagText}>{tag.toUpperCase()}</Text>
             </View>
@@ -273,7 +292,15 @@ export default function PodcastDetailScreen() {
           </Text>
           <View style={styles.metaDot} />
           <MaterialIcons name="record-voice-over" size={13} color="#8A8F9A" />
-          <Text style={styles.metaText}>{podcast.speakerCount === 2 ? 'DUAL' : 'SOLO'}</Text>
+          <Text style={styles.metaText}>
+            {listenNotesPodcastId
+              ? podcast.publisher?.trim() ||
+                podcast.categories?.find((c) => c.trim().toLowerCase() !== 'podcast') ||
+                'LISTEN NOTES'
+              : podcast.speakerCount === 2
+                ? 'DUAL'
+                : 'SOLO'}
+          </Text>
         </View>
 
         {isProcessing && (
@@ -282,10 +309,26 @@ export default function PodcastDetailScreen() {
             <View style={{ flex: 1 }}>
               <Text style={styles.processingTitle}>Creating your podcast…</Text>
               <Text style={styles.processingDesc}>
-                Audio will be ready first; then you can open the transcript and translations. This
-                screen updates automatically.
+                {hasScriptPreview
+                  ? 'Your episode script is ready below — we are generating the MP3. Listen unlocks when audio is ready; timed captions appear after that.'
+                  : 'Fetching headlines and drafting your episode… This screen refreshes automatically.'}
               </Text>
             </View>
+          </View>
+        )}
+
+        {showScriptPreviewPanel && (
+          <View style={styles.scriptPreviewCard}>
+            <View style={styles.scriptPreviewTitleRow}>
+              <MaterialIcons name="article" size={20} color="#0714B8" />
+              <Text style={styles.scriptPreviewTitle}>Episode script</Text>
+            </View>
+            {!audioReady && (
+              <Text style={styles.scriptPreviewBadge}>Preview · audio generating</Text>
+            )}
+            <Text style={styles.scriptPreviewBody} selectable>
+              {scriptPreviewText}
+            </Text>
           </View>
         )}
 
@@ -293,8 +336,8 @@ export default function PodcastDetailScreen() {
           <View style={styles.audioFirstHint}>
             <MaterialIcons name="play-circle-outline" size={20} color="#0714B8" />
             <Text style={styles.audioFirstHintText}>
-              Listen first — use Listen below for the full player. Expand Transcript when you are
-              ready to read along or review Turkish lines.
+              Use Listen below for the full player. Transcript below is expanded by default — tap the
+              header to collapse or expand while you read along.
             </Text>
           </View>
         )}
@@ -342,7 +385,11 @@ export default function PodcastDetailScreen() {
                   Transcript
                 </Text>
                 {!canUseTranscript && !isFailed && (
-                  <Text style={styles.sectionSubtitle}>Unlocks when audio is ready</Text>
+                  <Text style={styles.sectionSubtitle}>
+                    {hasScriptPreview && !audioReady
+                      ? 'Timed lines unlock when audio finishes'
+                      : 'Unlocks when audio is ready'}
+                  </Text>
                 )}
                 {canUseTranscript && !showTranscript && transcript.length > 0 && (
                   <Text style={styles.sectionSubtitle}>
@@ -417,7 +464,18 @@ export default function PodcastDetailScreen() {
               );
               return;
             }
-            router.push({ pathname: '/player', params: { id: podcast.id } });
+            const ln = podcast.listenNotesPodcastId?.trim();
+            const lnEp = podcast.listenNotesEpisodeId?.trim();
+            router.push({
+              pathname: '/player',
+              params: ln
+                ? {
+                    id: podcast.id,
+                    lnId: ln,
+                    ...(lnEp ? { lnEpisodeId: lnEp } : {}),
+                  }
+                : { id: podcast.id },
+            });
           }}
           activeOpacity={0.85}>
           <View style={styles.stickyPlayIconSlot}>
@@ -552,6 +610,44 @@ const styles = StyleSheet.create({
   },
   processingTitle: { fontWeight: '800', color: '#0714B8', marginBottom: 2, fontSize: 14 },
   processingDesc: { color: '#3D4048', fontSize: 12 },
+
+  scriptPreviewCard: {
+    marginHorizontal: 16,
+    marginBottom: 16,
+    padding: 14,
+    borderRadius: 14,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  scriptPreviewTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  scriptPreviewTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#111318',
+  },
+  scriptPreviewBadge: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#0714B8',
+    marginBottom: 10,
+    letterSpacing: 0.3,
+  },
+  scriptPreviewBody: {
+    fontSize: 13,
+    lineHeight: 21,
+    color: '#3D4048',
+  },
 
   failedCard: {
     flexDirection: 'row', alignItems: 'flex-start', gap: 12,

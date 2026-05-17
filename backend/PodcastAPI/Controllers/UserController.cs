@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using PodcastAPI.Data;
 using PodcastAPI.Dto;
+using PodcastAPI.Services.Storage;
 using System.Security.Claims;
 
 namespace PodcastAPI.Controllers;
@@ -10,7 +11,10 @@ namespace PodcastAPI.Controllers;
 [Authorize]
 [ApiController]
 [Route("api/[controller]")]
-public class UserController(AppDbContext context, IWebHostEnvironment env) : ControllerBase
+public class UserController(
+    AppDbContext context,
+    IProfilePhotoStorage profilePhotoStorage,
+    IWebHostEnvironment env) : ControllerBase
 {
     private static readonly HashSet<string> AllowedExtensions = new(StringComparer.OrdinalIgnoreCase)
         { ".jpg", ".jpeg", ".png", ".webp" };
@@ -79,25 +83,55 @@ public class UserController(AppDbContext context, IWebHostEnvironment env) : Con
             return BadRequest(new { message = "Only JPG, PNG and WebP files are allowed." });
 
         var userId = GetUserId();
+        if (userId == Guid.Empty)
+            return Unauthorized(new { message = "Invalid token." });
+
         var user = await context.Users.FindAsync(userId);
         if (user == null) return NotFound(new { message = "User not found." });
 
-        var photosDir = Path.Combine(env.WebRootPath ?? "wwwroot", "photos");
-        Directory.CreateDirectory(photosDir);
+        try
+        {
+            TryDeleteLegacyLocalPhoto(user.PhotoUrl);
+            var photoUrl = await profilePhotoStorage.SaveAsync(photo, userId, HttpContext.RequestAborted);
+            user.PhotoUrl = photoUrl;
+            await context.SaveChangesAsync();
 
-        var filename = $"{userId}{ext.ToLowerInvariant()}";
-        var filePath = Path.Combine(photosDir, filename);
+            return Ok(new { photoUrl });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
 
-        await using (var stream = new FileStream(filePath, FileMode.Create))
-            await photo.CopyToAsync(stream);
+    /// <summary>Eski wwwroot tabanlı fotoğraf dosyasını sil (Firebase'e geçişte disk dolmasın).</summary>
+    private void TryDeleteLegacyLocalPhoto(string? previousUrl)
+    {
+        if (string.IsNullOrWhiteSpace(previousUrl)) return;
 
-        var req = HttpContext.Request;
-        var photoUrl = $"{req.Scheme}://{req.Host}/photos/{filename}";
+        var marker = "/photos/";
+        var idx = previousUrl.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+        if (idx < 0) return;
 
-        user.PhotoUrl = photoUrl;
-        await context.SaveChangesAsync();
+        var fname = previousUrl[(idx + marker.Length)..];
+        if (fname.Contains('/') || fname.Contains('\\')) return;
 
-        return Ok(new { photoUrl });
+        var wwwroot = env.WebRootPath ?? Path.Combine(env.ContentRootPath, "wwwroot");
+        var path = Path.Combine(wwwroot, "photos", fname);
+
+        try
+        {
+            if (System.IO.File.Exists(path))
+                System.IO.File.Delete(path);
+        }
+        catch
+        {
+            /* noop */
+        }
     }
 
     private Guid GetUserId()
