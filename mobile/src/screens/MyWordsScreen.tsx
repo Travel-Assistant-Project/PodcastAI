@@ -117,8 +117,8 @@ export default function MyWordsScreen() {
             </View>
             <View style={styles.progressDivider} />
             <View style={styles.progressItem}>
-              <Text style={styles.progressNum}>{progress.cefrLevel ?? '—'}</Text>
-              <Text style={styles.progressLabel}>Level</Text>
+              <Text style={styles.progressNum}>{progress.learningPodcastsCount}</Text>
+              <Text style={styles.progressLabel}>Podcasts</Text>
             </View>
           </View>
         )}

@@ -26,13 +26,8 @@ ALTER TABLE podcasts
 ALTER TABLE podcasts ADD COLUMN IF NOT EXISTS transcriptjson jsonb;
 
 -- 03.05.2026: Dil öğrenme modu (CEFR + çeviri + kelime defteri).
--- Onboarding'de kullanıcı "sadece dinle" / "öğren" seçer; öğrenme modunda
--- her podcast bir CEFR seviyesinde üretilir, transcript satırları Türkçe çevirileriyle
--- (textTr) jsonb içinde döner, kullanıcının tıkladığı kelimeler defterinde toplanır.
-
-ALTER TABLE users
-    ADD COLUMN IF NOT EXISTS preferredmode VARCHAR(10),     -- 'listen' | 'learn' | NULL (henüz seçilmemiş)
-    ADD COLUMN IF NOT EXISTS cefrlevel     VARCHAR(4);      -- 'A1'..'C2'
+-- Öğrenme seçimi ve CEFR seviyesi podcast oluştururken verilir (users tablosunda tutulmaz).
+-- Öğrenme modunda podcast CEFR seviyesinde üretilir; transcript Türkçe çevirileriyle döner.
 
 ALTER TABLE podcasts
     ADD COLUMN IF NOT EXISTS cefrlevel    VARCHAR(4),       -- NULL ise sade dinleme podcast'i
@@ -91,3 +86,7 @@ CREATE TABLE IF NOT EXISTS userquizattempts (
     Score         INT,
     CreatedAt     TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+-- 07.05.2026: preferredmode / cefrlevel users'dan kaldırıldı (sadece podcast bazında).
+ALTER TABLE users DROP COLUMN IF EXISTS preferredmode;
+ALTER TABLE users DROP COLUMN IF EXISTS cefrlevel;

@@ -1,5 +1,4 @@
 // Basit in-memory auth store. Persistence şu an yok; uygulamayı tekrar açınca login gerekir.
-// PreferredMode = null ise mobile uygulamayı onboarding'e yönlendirir.
 
 export type AuthUser = {
   id: string;

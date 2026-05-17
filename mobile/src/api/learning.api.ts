@@ -1,12 +1,6 @@
 import { api } from '@/src/api/client';
 
 export type CefrLevel = 'A1' | 'A2' | 'B1' | 'B2' | 'C1' | 'C2';
-export type PreferredMode = 'listen' | 'learn';
-
-export type OnboardingResponse = {
-  preferredMode: PreferredMode;
-  cefrLevel: CefrLevel | null;
-};
 
 export type TranslateWordResponse = {
   word: string;
@@ -33,16 +27,7 @@ export type LearningProgress = {
   learnedWords: number;
   learningPodcastsCount: number;
   totalListenSeconds: number;
-  cefrLevel?: CefrLevel | null;
 };
-
-export async function submitOnboarding(payload: {
-  preferredMode: PreferredMode;
-  cefrLevel?: CefrLevel | null;
-}): Promise<OnboardingResponse> {
-  const { data } = await api.post<OnboardingResponse>('/api/learning/onboarding', payload);
-  return data;
-}
 
 export async function translateWord(payload: {
   word: string;
