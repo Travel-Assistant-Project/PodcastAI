@@ -60,6 +60,23 @@ export type GeneratePodcastResponse = {
   status: string;
 };
 
+export type RecentlyPlayed = {
+  podcastId: string;
+  title?: string | null;
+  audioUrl?: string | null;
+  progressSeconds: number;
+  isCompleted: boolean;
+  lastListenedAt: string;
+  durationSeconds?: number | null;
+  categories: string[];
+  status?: string | null;
+};
+
+export type RecordPlayRequest = {
+  progressSeconds: number;
+  isCompleted: boolean;
+};
+
 export async function generatePodcast(
   payload: GeneratePodcastRequest,
 ): Promise<GeneratePodcastResponse> {
@@ -74,5 +91,25 @@ export async function getPodcastById(id: string): Promise<PodcastDetail> {
 
 export async function getPodcasts(): Promise<PodcastSummary[]> {
   const { data } = await api.get<PodcastSummary[]>('/api/podcasts');
+  return data;
+}
+
+export async function getLatestPodcast(): Promise<PodcastSummary | null> {
+  const response = await api.get<PodcastSummary>('/api/podcasts/latest');
+  if (response.status === 204) return null;
+  return response.data;
+}
+
+export async function getRecommendedPodcasts(): Promise<PodcastSummary[]> {
+  const { data } = await api.get<PodcastSummary[]>('/api/podcasts/recommended');
+  return data;
+}
+
+export async function recordPlay(id: string, payload: RecordPlayRequest): Promise<void> {
+  await api.post(`/api/podcasts/${id}/play`, payload);
+}
+
+export async function getRecentlyPlayed(): Promise<RecentlyPlayed[]> {
+  const { data } = await api.get<RecentlyPlayed[]>('/api/podcasts/recently-played');
   return data;
 }

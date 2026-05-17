@@ -1,64 +1,110 @@
-import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import {
+  ActivityIndicator,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'expo-router';
 
-import { getInterests } from '@/src/api/interests.api';
+import { getMyInterests } from '@/src/api/interests.api';
+import {
+  getLatestPodcast,
+  getRecentlyPlayed,
+  getRecommendedPodcasts,
+  type PodcastSummary,
+  type RecentlyPlayed,
+} from '@/src/api/podcasts.api';
 import { Colors } from '@/src/styles/colors';
 import FavoriteButton from '@/src/components/FavoriteButton';
 import { getUser } from '@/src/store/authStore';
 
-const recommendedItems = [
-  {
-    id: 'r1',
-    title: 'The Future of Large Language Models',
-    meta: '45 mins',
-    category: 'AI INNOVATIONS',
-    imageUrl: 'https://images.unsplash.com/photo-1677442136019-21780ecad995?q=80&w=600&auto=format&fit=crop',
-  },
-  {
-    id: 'r2',
-    title: 'Decoding the Neural Network Mind',
-    meta: '32 mins',
-    category: 'NEURAL NETWORK',
-    imageUrl: 'https://images.unsplash.com/photo-1555949963-aa79dcee981c?q=80&w=600&auto=format&fit=crop',
-  },
-];
+const POLL_INTERVAL_MS = 5000;
 
-const recentPlayed = [
-  {
-    id: 'p1',
-    title: 'Ethics in the Age of Automation',
-    subtitle: 'Philosophy Now',
-    progress: '12m left',
-    imageUrl: 'https://images.unsplash.com/photo-1518770660439-4636190af475?q=80&w=300&auto=format&fit=crop',
-  },
-  {
-    id: 'p2',
-    title: 'Quantum Computing Explained',
-    subtitle: 'Science Daily',
-    progress: 'Completed',
-    imageUrl: 'https://images.unsplash.com/photo-1635070041078-e363dbe005cb?q=80&w=300&auto=format&fit=crop',
-  },
-  {
-    id: 'p3',
-    title: 'Human-Machine Synergy',
-    subtitle: 'PodcastAI Collective',
-    progress: '5m left',
-    imageUrl: 'https://images.unsplash.com/photo-1620712943543-bcc4688e7485?q=80&w=300&auto=format&fit=crop',
-  },
-  {
-    id: 'p4',
-    title: 'The Evolution of Voice AI',
-    subtitle: 'Sound Systems',
-    progress: '32m left',
-    imageUrl: 'https://images.unsplash.com/photo-1488229297570-58520851e868?q=80&w=300&auto=format&fit=crop',
-  },
-];
+const CATEGORY_COLORS: Record<string, string> = {
+  technology: '#1E3A8A',
+  ai: '#3730A3',
+  science: '#065F46',
+  health: '#7C2D12',
+  finance: '#78350F',
+  economy: '#374151',
+  sports: '#1E40AF',
+  music: '#581C87',
+  entertainment: '#831843',
+  world: '#134E4A',
+};
+
+function categoryColor(categories: string[]): string {
+  const first = (categories[0] ?? '').toLowerCase();
+  return CATEGORY_COLORS[first] ?? '#1E3A8A';
+}
+
+function formatDuration(seconds?: number | null): string {
+  if (!seconds) return '';
+  const m = Math.round(seconds / 60);
+  return `${m} min`;
+}
+
+function formatProgress(progressSeconds: number, durationSeconds?: number | null, isCompleted?: boolean): string {
+  if (isCompleted) return 'Completed';
+  if (!durationSeconds || progressSeconds === 0) return 'Not started';
+  const remaining = Math.max(0, durationSeconds - progressSeconds);
+  const m = Math.round(remaining / 60);
+  return m <= 0 ? 'Almost done' : `${m}m left`;
+}
+
+function StatusBadge({ status }: Readonly<{ status?: string | null }>) {
+  const isProcessing = status === 'processing';
+  return (
+    <View style={[styles.heroBadge, isProcessing && styles.heroBadgeProcessing]}>
+      {isProcessing && <ActivityIndicator size={10} color="#fff" style={{ marginRight: 4 }} />}
+      <Text style={styles.heroBadgeText}>{isProcessing ? 'Processing…' : 'LIVE NOW'}</Text>
+    </View>
+  );
+}
+
+function HeroSkeleton() {
+  return (
+    <View style={[styles.heroCard, { justifyContent: 'center', alignItems: 'center', minHeight: 180 }]}>
+      <ActivityIndicator color="#fff" />
+      <Text style={[styles.heroTime, { marginTop: 8 }]}>Loading latest podcast…</Text>
+    </View>
+  );
+}
+
+function HeroEmpty() {
+  const router = useRouter();
+  return (
+    <View style={[styles.heroCard, { alignItems: 'center', paddingVertical: 28 }]}>
+      <Text style={[styles.heroTitle, { fontSize: 22, textAlign: 'center' }]}>
+        No podcasts yet
+      </Text>
+      <Text style={[styles.heroTime, { textAlign: 'center', marginTop: 6 }]}>
+        Create your first AI podcast to get started.
+      </Text>
+      <TouchableOpacity style={[styles.primaryBtn, { marginTop: 16 }]} onPress={() => router.push('/create')}>
+        <Text style={styles.primaryBtnText}>＋ Create Podcast</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
 
 export default function HomeScreen() {
   const router = useRouter();
-  const [interestNames, setInterestNames] = useState<string[]>([]);
+
+  const [latestPodcast, setLatestPodcast] = useState<PodcastSummary | null | undefined>(undefined);
+  const [recommended, setRecommended] = useState<PodcastSummary[]>([]);
+  const [recentlyPlayed, setRecentlyPlayed] = useState<RecentlyPlayed[]>([]);
+  const [interestText, setInterestText] = useState('Based on your interests');
+
+  const [loadingLatest, setLoadingLatest] = useState(true);
+  const [loadingRec, setLoadingRec] = useState(true);
+  const [loadingRecent, setLoadingRecent] = useState(true);
+
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const user = getUser();
   const displayName = useMemo(() => {
@@ -67,27 +113,84 @@ export default function HomeScreen() {
     return fullName.split(' ')[0] || fullName;
   }, [user?.fullName]);
 
-  useEffect(() => {
-    const loadInterests = async () => {
-      try {
-        const data = await getInterests();
-        setInterestNames(data.slice(0, 3).map((item) => item.name));
-      } catch {
-        setInterestNames([]);
-      }
-    };
-
-    loadInterests();
+  // --- Fetch latest podcast (+ poll while processing) ---
+  const fetchLatest = useCallback(async () => {
+    try {
+      const data = await getLatestPodcast();
+      setLatestPodcast(data);
+      return data;
+    } catch {
+      setLatestPodcast(null);
+      return null;
+    } finally {
+      setLoadingLatest(false);
+    }
   }, []);
 
-  const interestText = useMemo(() => {
-    if (!interestNames.length) return 'Based on your interest in Machine Learning';
-    return `Based on your interests: ${interestNames.join(', ')}`;
-  }, [interestNames]);
+  const startPolling = useCallback(() => {
+    if (pollRef.current) return;
+    pollRef.current = setInterval(async () => {
+      const data = await fetchLatest();
+      if (data?.status !== 'processing') {
+        clearInterval(pollRef.current ?? undefined);
+        pollRef.current = null;
+      }
+    }, POLL_INTERVAL_MS);
+  }, [fetchLatest]);
+
+  useEffect(() => {
+    fetchLatest().then((data) => {
+      if (data?.status === 'processing') startPolling();
+    });
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, [fetchLatest, startPolling]);
+
+  // When latest podcast status changes to processing, start polling
+  useEffect(() => {
+    if (latestPodcast?.status === 'processing') {
+      startPolling();
+      return;
+    }
+    clearInterval(pollRef.current ?? undefined);
+    pollRef.current = null;
+  }, [latestPodcast?.status, startPolling]);
+
+  // --- Fetch recommended + interests ---
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const [recs, myInterests] = await Promise.all([
+          getRecommendedPodcasts(),
+          getMyInterests(),
+        ]);
+        setRecommended(recs);
+        if (myInterests.length > 0) {
+          const names = myInterests.slice(0, 3).map((i) => i.name);
+          setInterestText(`Based on your interests: ${names.join(', ')}`);
+        }
+      } catch {
+        setRecommended([]);
+      } finally {
+        setLoadingRec(false);
+      }
+    };
+    load();
+  }, []);
+
+  // --- Fetch recently played ---
+  useEffect(() => {
+    getRecentlyPlayed()
+      .then(setRecentlyPlayed)
+      .catch(() => setRecentlyPlayed([]))
+      .finally(() => setLoadingRecent(false));
+  }, []);
 
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
       <ScrollView contentContainerStyle={styles.content}>
+        {/* Header */}
         <View style={styles.header}>
           <Text style={styles.brand}>PodcastAI</Text>
           <View style={styles.headerActions}>
@@ -97,63 +200,164 @@ export default function HomeScreen() {
         </View>
 
         <Text style={styles.greeting}>Merhaba, {displayName}!</Text>
-        <Text style={styles.subtitle}>Your AI Curator has 3 new insights for you today.</Text>
+        <Text style={styles.subtitle}>Your AI Curator has new insights for you today.</Text>
 
-        <View style={styles.heroCard}>
-          <View style={styles.heroTop}>
-            <Text style={styles.heroLive}>LIVE NOW</Text>
-            <Text style={styles.heroTime}>10-15 mins</Text>
-          </View>
-          <Text style={styles.heroTitle}>Today&apos;s Tech Briefing: The Generative Frontier</Text>
+        {/* ── Today's Tech ── */}
+        {loadingLatest && <HeroSkeleton />}
+        {!loadingLatest && latestPodcast && (
+          <View style={[styles.heroCard, { backgroundColor: categoryColor(latestPodcast.categories) }]}>
+            <View style={styles.heroTop}>
+              <StatusBadge status={latestPodcast.status} />
+              {latestPodcast.durationSeconds != null && (
+                <Text style={styles.heroTime}>{formatDuration(latestPodcast.durationSeconds)}</Text>
+              )}
+              {latestPodcast.categories.length > 0 && (
+                <Text style={styles.heroCategory}>{latestPodcast.categories[0].toUpperCase()}</Text>
+              )}
+            </View>
+            <Text style={styles.heroTitle} numberOfLines={3}>
+              {latestPodcast.title ?? "Today's Briefing"}
+            </Text>
           <View style={styles.heroButtons}>
-            <TouchableOpacity style={styles.primaryBtn} onPress={() => router.push('/player')}>
-              <Text style={styles.primaryBtnText}>▶ Listen Now</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.secondaryBtn} onPress={() => router.push('/podcast')}>
-              <Text style={styles.secondaryBtnText}>◫ View Insights</Text>
-            </TouchableOpacity>
+            {latestPodcast.status === 'completed' && (
+              <>
+                <TouchableOpacity
+                  style={styles.primaryBtn}
+                  onPress={() => router.push({ pathname: '/player', params: { id: latestPodcast.id } })}
+                >
+                  <Text style={styles.primaryBtnText}>▶ Listen Now</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.secondaryBtn}
+                  onPress={() => router.push({ pathname: '/podcast', params: { id: latestPodcast.id } })}
+                >
+                  <Text style={styles.secondaryBtnText}>◫ View Insights</Text>
+                </TouchableOpacity>
+              </>
+            )}
+            {latestPodcast.status !== 'completed' && (
+              <View style={styles.processingNote}>
+                <Text style={styles.processingNoteText}>
+                  Your podcast is being prepared. This usually takes 1–2 minutes.
+                </Text>
+              </View>
+            )}
           </View>
         </View>
+        )}
+        {!loadingLatest && !latestPodcast && <HeroEmpty />}
 
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Recommended for You</Text>
-          <Text style={styles.sectionAction}>View All</Text>
-        </View>
-        <Text style={styles.sectionSubtext}>{interestText}</Text>
-
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.recommendedRow}>
-          {recommendedItems.map((item) => (
-            <TouchableOpacity key={item.id} style={styles.recommendedCard} activeOpacity={0.85} onPress={() => router.push('/podcast')}>
-              <Image source={{ uri: item.imageUrl }} style={styles.recommendedImage} />
-              <View style={styles.recommendedFavBtn}>
-                <FavoriteButton size={15} />
-              </View>
-              <Text style={styles.recommendedCategory}>{item.category}</Text>
-              <Text numberOfLines={2} style={styles.recommendedTitle}>
-                {item.title}
-              </Text>
-              <Text style={styles.recommendedMeta}>{item.meta}</Text>
+        {/* ── Recommended for You ── */}
+        <View>
+          <View style={styles.recSubRow}>
+            <Text style={styles.sectionTitle}>Recommended for You</Text>
+            <TouchableOpacity
+              style={styles.viewAllBtn}
+              activeOpacity={0.75}
+              onPress={() => router.push('/past-podcasts')}
+            >
+              <Text style={styles.viewAllBtnText}>View All</Text>
             </TouchableOpacity>
-          ))}
-        </ScrollView>
+          </View>
+          <Text style={styles.sectionSubtext}>{interestText}</Text>
+        </View>
 
+        {loadingRec && (
+          <View style={styles.centeredLoader}>
+            <ActivityIndicator color={Colors.primary} />
+          </View>
+        )}
+        {!loadingRec && recommended.length === 0 && (
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyText}>
+              Complete a podcast to see personalized recommendations.
+            </Text>
+          </View>
+        )}
+        {!loadingRec && recommended.length > 0 && (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.recommendedRow}
+          >
+            {recommended.map((item) => (
+              <TouchableOpacity
+                key={item.id}
+                style={styles.recommendedCard}
+                activeOpacity={0.85}
+                onPress={() => router.push({ pathname: '/podcast', params: { id: item.id } })}
+              >
+                <View
+                  style={[
+                    styles.recommendedImagePlaceholder,
+                    { backgroundColor: categoryColor(item.categories) },
+                  ]}
+                >
+                  <Text style={styles.recommendedPlaceholderIcon}>🎙</Text>
+                </View>
+                <View style={styles.recommendedFavBtn}>
+                  <FavoriteButton size={15} />
+                </View>
+                {item.categories.length > 0 && (
+                  <Text style={styles.recommendedCategory}>
+                    {item.categories[0].toUpperCase()}
+                  </Text>
+                )}
+                <Text numberOfLines={2} style={styles.recommendedTitle}>
+                  {item.title ?? 'Untitled Podcast'}
+                </Text>
+                <Text style={styles.recommendedMeta}>{formatDuration(item.durationSeconds)}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        )}
+
+        {/* ── Recently Played ── */}
         <Text style={styles.sectionTitle}>Recently Played</Text>
-        <View style={styles.listWrap}>
-          {recentPlayed.map((item) => (
-            <TouchableOpacity key={item.id} style={styles.listItem} activeOpacity={0.8} onPress={() => router.push('/podcast')}>
-              <Image source={{ uri: item.imageUrl }} style={styles.thumb} />
-              <View style={styles.listContent}>
-                <Text numberOfLines={1} style={styles.listTitle}>
-                  {item.title}
-                </Text>
-                <Text style={styles.listSubtitle}>
-                  {item.subtitle} - {item.progress}
-                </Text>
-              </View>
-              <Text style={styles.chevron}>›</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+
+        {loadingRecent && (
+          <View style={styles.centeredLoader}>
+            <ActivityIndicator color={Colors.primary} />
+          </View>
+        )}
+        {!loadingRecent && recentlyPlayed.length === 0 && (
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyText}>
+              You haven't listened to any podcasts yet.{'\n'}Start listening to track your history.
+            </Text>
+          </View>
+        )}
+        {!loadingRecent && recentlyPlayed.length > 0 && (
+          <View style={styles.listWrap}>
+            {recentlyPlayed.map((item) => (
+              <TouchableOpacity
+                key={item.podcastId}
+                style={styles.listItem}
+                activeOpacity={0.8}
+                onPress={() => router.push({ pathname: '/podcast', params: { id: item.podcastId } })}
+              >
+                <View
+                  style={[
+                    styles.thumb,
+                    { backgroundColor: categoryColor(item.categories), justifyContent: 'center', alignItems: 'center' },
+                  ]}
+                >
+                  <Text style={{ fontSize: 20 }}>🎙</Text>
+                </View>
+                <View style={styles.listContent}>
+                  <Text numberOfLines={1} style={styles.listTitle}>
+                    {item.title ?? 'Untitled Podcast'}
+                  </Text>
+                  <Text style={styles.listSubtitle}>
+                    {item.categories[0] ?? 'Podcast'} ·{' '}
+                    {formatProgress(item.progressSeconds, item.durationSeconds, item.isCompleted)}
+                  </Text>
+                </View>
+                <Text style={styles.chevron}>›</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -217,27 +421,40 @@ const styles = StyleSheet.create({
   heroTop: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    flexWrap: 'wrap',
+    gap: 8,
   },
-  heroLive: {
-    color: Colors.surface,
-    fontSize: 11,
-    fontWeight: '700',
+  heroBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: 'rgba(255,255,255,0.18)',
     borderRadius: 999,
     paddingHorizontal: 8,
     paddingVertical: 4,
+  },
+  heroBadgeProcessing: {
+    backgroundColor: 'rgba(251,191,36,0.25)',
+  },
+  heroBadgeText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '700',
   },
   heroTime: {
     color: '#DCE6FF',
     fontWeight: '600',
     fontSize: 13,
   },
+  heroCategory: {
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: 10,
+    fontWeight: '700',
+  },
   heroTitle: {
     marginTop: 12,
     color: Colors.surface,
-    fontSize: 40,
-    lineHeight: 43,
+    fontSize: 36,
+    lineHeight: 40,
     fontWeight: '800',
   },
   heroButtons: {
@@ -269,17 +486,35 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 14,
   },
+  processingNote: {
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 12,
+    padding: 10,
+  },
+  processingNoteText: {
+    color: '#DCE6FF',
+    fontSize: 13,
+    lineHeight: 18,
+  },
   sectionHeader: {
     marginTop: 8,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 8,
+  },
+  recSubRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
   },
   sectionTitle: {
     color: Colors.text,
     fontSize: 34,
     lineHeight: 36,
     fontWeight: '800',
+    flexShrink: 1,
   },
   sectionAction: {
     color: Colors.primary,
@@ -287,11 +522,41 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginTop: 2,
   },
+  viewAllBtn: {
+    backgroundColor: Colors.primary,
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    flexShrink: 0,
+  },
+  viewAllBtnText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '700',
+  },
   sectionSubtext: {
-    marginTop: -2,
+    marginTop: 2,
     color: Colors.textMuted,
     fontSize: 12,
     lineHeight: 16,
+  },
+  centeredLoader: {
+    paddingVertical: 24,
+    alignItems: 'center',
+  },
+  emptyCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: 20,
+    alignItems: 'center',
+  },
+  emptyText: {
+    color: Colors.textMuted,
+    fontSize: 14,
+    lineHeight: 20,
+    textAlign: 'center',
   },
   recommendedRow: {
     gap: 12,
@@ -301,12 +566,16 @@ const styles = StyleSheet.create({
     position: 'relative',
     width: 195,
   },
-  recommendedImage: {
+  recommendedImagePlaceholder: {
     width: '100%',
     height: 220,
     borderRadius: 16,
     marginBottom: 8,
-    backgroundColor: '#CED8F6',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  recommendedPlaceholderIcon: {
+    fontSize: 52,
   },
   recommendedFavBtn: {
     position: 'absolute',

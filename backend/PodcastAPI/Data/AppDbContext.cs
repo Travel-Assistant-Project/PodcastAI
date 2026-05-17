@@ -14,6 +14,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<UserWord> UserWords { get; set; }
     public DbSet<WordTranslationCache> WordTranslationCache { get; set; }
     public DbSet<UserQuizAttempt> UserQuizAttempts { get; set; }
+    public DbSet<ListeningHistory> ListeningHistories { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -27,6 +28,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.Property(e => e.PasswordHash).HasColumnName("passwordhash");
             entity.Property(e => e.Age).HasColumnName("age");
             entity.Property(e => e.Occupation).HasColumnName("job");
+            entity.Property(e => e.PhotoUrl).HasColumnName("photourl");
             entity.Property(e => e.CreatedAt).HasColumnName("createdat");
         });
 
@@ -154,6 +156,26 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.Property(e => e.AnswersJson).HasColumnName("answersjson").HasColumnType("jsonb");
             entity.Property(e => e.Score).HasColumnName("score");
             entity.Property(e => e.CreatedAt).HasColumnName("createdat");
+        });
+
+        // ListeningHistory - dinleme geçmişi ve kaldığı yer
+        modelBuilder.Entity<ListeningHistory>(entity =>
+        {
+            entity.ToTable("listeninghistory", t => t.ExcludeFromMigrations());
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("id");
+            entity.Property(e => e.UserId).HasColumnName("userid");
+            entity.Property(e => e.PodcastId).HasColumnName("podcastid");
+            entity.Property(e => e.ProgressSeconds).HasColumnName("progressseconds");
+            entity.Property(e => e.IsCompleted).HasColumnName("iscompleted");
+            entity.Property(e => e.LastListenedAt).HasColumnName("lastlistenedat");
+
+            entity.HasOne(e => e.Podcast)
+                  .WithMany()
+                  .HasForeignKey(e => e.PodcastId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => new { e.UserId, e.PodcastId }).IsUnique();
         });
 
     }

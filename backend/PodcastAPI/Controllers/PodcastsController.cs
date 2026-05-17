@@ -73,23 +73,119 @@ public class PodcastsController(
             .AsNoTracking()
             .Where(p => p.UserId == userId)
             .OrderByDescending(p => p.CreatedAt)
-            .Select(p => new PodcastSummaryDto
+            .ToListAsync();
+
+        return Ok(podcasts.Select(ToSummaryDto).ToList());
+    }
+
+    [HttpGet("latest")]
+    public async Task<ActionResult<PodcastSummaryDto>> GetLatest()
+    {
+        if (!TryGetUserId(out var userId)) return Unauthorized(new { message = "Invalid token." });
+
+        var podcast = await db.Podcasts
+            .AsNoTracking()
+            .Where(p => p.UserId == userId)
+            .OrderByDescending(p => p.CreatedAt)
+            .FirstOrDefaultAsync();
+
+        if (podcast == null) return NoContent();
+        return Ok(ToSummaryDto(podcast));
+    }
+
+    [HttpGet("recommended")]
+    public async Task<ActionResult<List<PodcastSummaryDto>>> GetRecommended()
+    {
+        if (!TryGetUserId(out var userId)) return Unauthorized(new { message = "Invalid token." });
+
+        // Kullanıcının ilgi alanlarını çek
+        var interestIds = await db.UserInterests
+            .Where(ui => ui.UserId == userId)
+            .Select(ui => ui.InterestId)
+            .ToListAsync();
+
+        var interestNames = await db.Interests
+            .Where(i => interestIds.Contains(i.Id))
+            .Select(i => i.Name.ToLower())
+            .ToListAsync();
+
+        // Tamamlanmış podcast'leri al, ilgi eşleşmesine göre skorla
+        var completed = await db.Podcasts
+            .AsNoTracking()
+            .Where(p => p.UserId == userId && p.Status == PodcastConstants.Status.Completed)
+            .OrderByDescending(p => p.CreatedAt)
+            .Take(30)
+            .ToListAsync();
+
+        var recommended = completed
+            .Select(p => new
             {
-                Id = p.Id,
-                Title = p.Title,
-                AudioUrl = p.AudioUrl,
-                DurationSeconds = p.DurationSeconds,
-                Status = p.Status,
-                Categories = string.IsNullOrWhiteSpace(p.CategoryName)
+                Podcast = p,
+                Score = interestNames.Count(interest =>
+                    (p.CategoryName ?? "").Contains(interest, StringComparison.OrdinalIgnoreCase))
+            })
+            .OrderByDescending(x => x.Score)
+            .ThenByDescending(x => x.Podcast.CreatedAt)
+            .Take(6)
+            .Select(x => ToSummaryDto(x.Podcast))
+            .ToList();
+
+        return Ok(recommended);
+    }
+
+    [HttpPost("{id:guid}/play")]
+    public async Task<ActionResult> RecordPlay(Guid id, [FromBody] RecordPlayDto request)
+    {
+        if (!TryGetUserId(out var userId)) return Unauthorized(new { message = "Invalid token." });
+
+        var podcastExists = await db.Podcasts.AnyAsync(p => p.Id == id && p.UserId == userId);
+        if (!podcastExists) return NotFound();
+
+        var history = await db.ListeningHistories
+            .FirstOrDefaultAsync(h => h.UserId == userId && h.PodcastId == id);
+
+        if (history == null)
+        {
+            history = new ListeningHistory { UserId = userId, PodcastId = id };
+            db.ListeningHistories.Add(history);
+        }
+
+        history.ProgressSeconds = request.ProgressSeconds;
+        history.IsCompleted = request.IsCompleted;
+        history.LastListenedAt = DateTime.UtcNow;
+
+        await db.SaveChangesAsync();
+        return Ok();
+    }
+
+    [HttpGet("recently-played")]
+    public async Task<ActionResult<List<RecentlyPlayedDto>>> GetRecentlyPlayed()
+    {
+        if (!TryGetUserId(out var userId)) return Unauthorized(new { message = "Invalid token." });
+
+        var history = await db.ListeningHistories
+            .AsNoTracking()
+            .Include(h => h.Podcast)
+            .Where(h => h.UserId == userId)
+            .OrderByDescending(h => h.LastListenedAt)
+            .Take(10)
+            .Select(h => new RecentlyPlayedDto
+            {
+                PodcastId = h.PodcastId,
+                Title = h.Podcast.Title,
+                AudioUrl = h.Podcast.AudioUrl,
+                ProgressSeconds = h.ProgressSeconds,
+                IsCompleted = h.IsCompleted,
+                LastListenedAt = h.LastListenedAt,
+                DurationSeconds = h.Podcast.DurationSeconds,
+                Categories = string.IsNullOrWhiteSpace(h.Podcast.CategoryName)
                     ? new List<string>()
-                    : p.CategoryName.Split(PodcastConstants.CategorySeparator, StringSplitOptions.RemoveEmptyEntries).ToList(),
-                CreatedAt = p.CreatedAt,
-                LearningMode = p.LearningMode,
-                CefrLevel = p.CefrLevel
+                    : h.Podcast.CategoryName.Split(PodcastConstants.CategorySeparator, StringSplitOptions.RemoveEmptyEntries).ToList(),
+                Status = h.Podcast.Status
             })
             .ToListAsync();
 
-        return Ok(podcasts);
+        return Ok(history);
     }
 
     private bool TryGetUserId(out Guid userId)
@@ -97,6 +193,21 @@ public class PodcastsController(
         var raw = User.FindFirstValue(ClaimTypes.NameIdentifier);
         return Guid.TryParse(raw, out userId);
     }
+
+    private PodcastSummaryDto ToSummaryDto(Podcast p) => new()
+    {
+        Id = p.Id,
+        Title = p.Title,
+        AudioUrl = p.AudioUrl,
+        DurationSeconds = p.DurationSeconds,
+        Status = p.Status,
+        Categories = string.IsNullOrWhiteSpace(p.CategoryName)
+            ? new List<string>()
+            : p.CategoryName.Split(PodcastConstants.CategorySeparator, StringSplitOptions.RemoveEmptyEntries).ToList(),
+        CreatedAt = p.CreatedAt,
+        LearningMode = p.LearningMode,
+        CefrLevel = p.CefrLevel
+    };
 
     private PodcastDetailDto ToDetailDto(Podcast p) => new()
     {
