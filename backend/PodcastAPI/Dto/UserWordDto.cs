@@ -35,4 +35,5 @@ public class LearningProgressDto
     public int LearnedWords { get; set; }
     public int LearningPodcastsCount { get; set; }
     public int TotalListenSeconds { get; set; }
+
 }
