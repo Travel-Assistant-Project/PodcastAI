@@ -10,5 +10,12 @@ public class RecentlyPlayedDto
     public DateTime LastListenedAt { get; set; }
     public int? DurationSeconds { get; set; }
     public List<string> Categories { get; set; } = new();
+
+    public string? CoverImageUrl { get; set; }
+
     public string? Status { get; set; }
+
+    public string? ListenNotesEpisodeId { get; set; }
+
+    public string? ListenNotesPodcastId { get; set; }
 }

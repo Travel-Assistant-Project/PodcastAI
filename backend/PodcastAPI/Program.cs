@@ -7,6 +7,8 @@ using PodcastAPI.Services.AiService;
 using Hangfire;
 using Hangfire.PostgreSql;
 using PodcastAPI.Services.External;
+using PodcastAPI.Services.PodcastCovers;
+using PodcastAPI.Services.Storage;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -44,6 +46,12 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     });
 
 builder.Services.AddAuthorization();
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddMemoryCache();
+builder.Services.AddSingleton<IPodcastCoverPoolService, PodcastCoverPoolService>();
+builder.Services.AddSingleton<IPodcastCoverReadUrlService, PodcastCoverReadUrlService>();
+builder.Services.AddSingleton<IPodcastCoverDisplayUrlResolver, PodcastCoverDisplayUrlResolver>();
+builder.Services.AddSingleton<IProfilePhotoStorage, ProfilePhotoStorage>();
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
@@ -53,13 +61,20 @@ builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<IPasswordHasher, PasswordHasherService>();
 builder.Services.AddScoped<IPodcastGeneratorJob, PodcastGeneratorJob>();
 
-// Listen Notes API için HttpClient ve Servis Kaydı
-var listenNotesKey = Env.GetString("LISTEN_NOTES_API_KEY");
-builder.Services.AddHttpClient<IExternalPodcastService, ListenNotesService>(client =>
+// Listen Notes API — anahtar yoksa önerilerde yalnızca kullanıcı içeriği kullanılır.
+var listenNotesKey = Env.GetString("LISTEN_NOTES_API_KEY")?.Trim();
+if (string.IsNullOrEmpty(listenNotesKey))
 {
-    client.BaseAddress = new Uri("https://listen-api.listennotes.com/api/v2/");
-    client.DefaultRequestHeaders.Add("X-ListenAPI-Key", listenNotesKey);
-});
+    builder.Services.AddSingleton<IExternalPodcastService, NoOpExternalPodcastService>();
+}
+else
+{
+    builder.Services.AddHttpClient<IExternalPodcastService, ListenNotesService>(client =>
+    {
+        client.BaseAddress = new Uri("https://listen-api.listennotes.com/api/v2/");
+        client.DefaultRequestHeaders.Add("X-ListenAPI-Key", listenNotesKey);
+    });
+}
 
 // AI Microservice için HTTP istemcisi
 var aiServiceSecret = Env.GetString("AI_SERVICE_SECRET");

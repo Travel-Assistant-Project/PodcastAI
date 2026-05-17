@@ -25,8 +25,9 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 
-import { getPodcastById, type PodcastDetail, type TranscriptSegment } from '@/src/api/podcasts.api';
+import { getListenNotesPodcastDetail, getPodcastById, type PodcastDetail, type TranscriptSegment } from '@/src/api/podcasts.api';
 import { usePlayback } from '@/src/context/PlaybackContext';
+import { categoryAccentColor } from '@/src/utils/categoryAccent';
 
 const { width } = Dimensions.get('window');
 const TRACK_WIDTH = width - 48;
@@ -41,8 +42,16 @@ function formatSeconds(totalSec: number): string {
 
 export default function AudioPlayerScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ id?: string }>();
-  const podcastId = typeof params.id === 'string' ? params.id : undefined;
+  const params = useLocalSearchParams<{ id?: string; lnId?: string; lnEpisodeId?: string }>();
+  const lnId =
+    typeof params.lnId === 'string' && params.lnId.trim().length > 0 ? params.lnId.trim() : undefined;
+  const lnEpisodeFromRoute =
+    typeof params.lnEpisodeId === 'string' && params.lnEpisodeId.trim().length > 0
+      ? params.lnEpisodeId.trim()
+      : undefined;
+  const podcastIdFromRoute =
+    typeof params.id === 'string' && params.id.trim().length > 0 ? params.id.trim() : undefined;
+
   const { height: windowHeight } = useWindowDimensions();
   const insets = useSafeAreaInsets();
 
@@ -52,11 +61,19 @@ export default function AudioPlayerScreen() {
 
   const transcriptListRef = useRef<FlatList<TranscriptSegment>>(null);
   const lastAutoScrollIndexRef = useRef<number>(-1);
+
+  const playbackPodcastId = podcast?.id ?? podcastIdFromRoute ?? '';
+
   const [speed, setSpeed] = useState<number>(1);
   const [showCaption, setShowCaption] = useState(false);
 
   const isActiveEpisode =
-    !!podcastId && playback.track?.podcastId === podcastId;
+    !!podcast &&
+    playbackPodcastId.length > 0 &&
+    playback.track != null &&
+    playback.track.podcastId === podcast.id &&
+    (playback.track.listenNotesEpisodeId?.trim() ?? '') ===
+      (podcast.listenNotesEpisodeId?.trim() ?? '');
   const isLoadingAudio = isActiveEpisode && playback.isLoading;
   const isPlaying = isActiveEpisode && playback.isPlaying;
   const positionMs = isActiveEpisode ? playback.positionMs : 0;
@@ -65,23 +82,38 @@ export default function AudioPlayerScreen() {
   const trackTitle = podcast?.title || 'Podcast';
   const trackMeta = useMemo(() => {
     if (!podcast) return '';
-    const cats = podcast.categories?.length
-      ? podcast.categories.join(' • ')
-      : 'Daily briefing';
+    const isLn = Boolean(podcast.listenNotesPodcastId?.trim());
+    const catsRaw = podcast.categories ?? [];
+    const catsFiltered = catsRaw.filter((c) => c.trim().toLowerCase() !== 'podcast');
+    const catsDisplay =
+      catsFiltered.length > 0 ? catsFiltered.join(' • ') : catsRaw.join(' • ');
+    const pub = podcast.publisher?.trim();
+
+    if (isLn) {
+      const parts = [catsDisplay, pub].filter((s) => s && s.length > 0);
+      return parts.length > 0 ? parts.join(' • ') : '';
+    }
+
+    const cats = catsRaw.length ? catsRaw.join(' • ') : 'Daily briefing';
     const speakers = podcast.speakerCount === 2 ? 'Dual Host' : 'Solo';
     return `${cats} • ${speakers}`;
   }, [podcast]);
 
+  const coverUri = podcast?.coverImageUrl?.trim() || null;
+
   // 1) Podcast meta bilgisini çek.
   useEffect(() => {
-    if (!podcastId) {
+    if (!lnId && !podcastIdFromRoute) {
       setLoadError('Invalid episode id.');
       return;
     }
     let cancelled = false;
+    setLoadError(null);
     (async () => {
       try {
-        const data = await getPodcastById(podcastId);
+        const data = lnId
+          ? await getListenNotesPodcastDetail(lnId, lnEpisodeFromRoute)
+          : await getPodcastById(podcastIdFromRoute!);
         if (!cancelled) setPodcast(data);
       } catch (e: any) {
         if (!cancelled) {
@@ -92,32 +124,51 @@ export default function AudioPlayerScreen() {
     return () => {
       cancelled = true;
     };
-  }, [podcastId]);
+  }, [lnId, lnEpisodeFromRoute, podcastIdFromRoute]);
 
-  // 2) Global oynatıcıda ses — ekrandan çıkınca da çalmaya devam eder.
+  // 2) Global oynatıcıda ses — kaldığı yerden devam (listeninghistory).
   useEffect(() => {
-    if (!podcast?.audioUrl || !podcastId) {
+    if (!podcast?.audioUrl || !playbackPodcastId) {
       if (podcast && !podcast.audioUrl) {
         setLoadError('Audio for this episode is not ready yet.');
       }
       return;
     }
+    const prog = podcast.listeningProgressSeconds ?? 0;
+    const done = podcast.listeningCompleted ?? false;
+    const resumeMs = !done && prog > 0 ? prog * 1000 : undefined;
     void playback.playTrack(
       {
-        podcastId,
+        podcastId: podcast.id,
         title: podcast.title ?? 'Podcast',
         audioUrl: podcast.audioUrl,
+        coverImageUrl: podcast.coverImageUrl?.trim() || null,
+        listenNotesPodcastId: podcast.listenNotesPodcastId?.trim() || null,
+        listenNotesEpisodeId: podcast.listenNotesEpisodeId?.trim() || null,
+        durationSecondsMeta: podcast.durationSeconds ?? null,
+        categories: podcast.categories?.length ? podcast.categories : null,
       },
-      { initialRate: speed },
+      { initialRate: speed, resumeMs },
     );
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- yalnızca kaynak / bölüm değişince
-  }, [podcast?.audioUrl, podcastId, podcast?.title, playback.playTrack]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- yalnızca kaynak / bölüm / kayıtlı konum değişince (hız ayrı efekt)
+  }, [
+    podcast?.audioUrl,
+    podcast?.id,
+    playbackPodcastId,
+    podcast?.title,
+    podcast?.listeningProgressSeconds,
+    podcast?.listeningCompleted,
+    podcast?.listenNotesPodcastId,
+    podcast?.listenNotesEpisodeId,
+    podcast?.durationSeconds,
+    playback.playTrack,
+  ]);
 
   useEffect(() => {
-    if (playback.track?.podcastId === podcastId) {
+    if (isActiveEpisode) {
       void playback.setPlaybackRate(speed);
     }
-  }, [speed, podcastId, playback.track?.podcastId, playback.setPlaybackRate]);
+  }, [speed, isActiveEpisode, playback.setPlaybackRate]);
 
   const displayError =
     loadError || (isActiveEpisode ? playback.playbackError : null);
@@ -141,12 +192,20 @@ export default function AudioPlayerScreen() {
   }, [router]);
 
   const openPodcastDetailForTranscript = useCallback(() => {
-    if (!podcastId) return;
+    if (!podcast) return;
+    const ln = podcast.listenNotesPodcastId?.trim();
+    const lnEp = podcast.listenNotesEpisodeId?.trim();
     router.push({
       pathname: '/podcast',
-      params: { id: podcastId, openTranscript: '1' },
+      params: ln
+        ? {
+            id: podcast.id,
+            lnId: ln,
+            ...(lnEp ? { lnEpisodeId: lnEp } : {}),
+          }
+        : { id: podcast.id },
     });
-  }, [router, podcastId]);
+  }, [router, podcast]);
 
   const dismissTranslateY = useSharedValue(0);
   const dismissThreshold = Math.min(128, windowHeight * 0.2);
@@ -395,33 +454,51 @@ export default function AudioPlayerScreen() {
             showsVerticalScrollIndicator={!hasTranscriptPanel}>
           {/* Album Art */}
           <View style={styles.artContainer}>
-            <Image
-              source={{
-                uri: 'https://images.unsplash.com/photo-1677442136019-21780ecad995?q=80&w=800&auto=format&fit=crop',
-              }}
-              style={[styles.artImage, { width: artSize, height: artSize }]}
-            />
-        {isLearning && podcast?.cefrLevel ? (
-          <View style={styles.cefrBadge}>
-            <MaterialIcons name="school" size={12} color="#fff" />
-            <Text style={styles.cefrBadgeText}>{podcast.cefrLevel}</Text>
+            {!podcast ? (
+              <View style={[styles.artImage, styles.artPlaceholder, { width: artSize, height: artSize }]}>
+                <ActivityIndicator color="#0714B8" />
+              </View>
+            ) : coverUri ? (
+              <Image
+                source={{ uri: coverUri }}
+                style={[styles.artImage, { width: artSize, height: artSize }]}
+              />
+            ) : (
+              <View
+                style={[
+                  styles.artImage,
+                  {
+                    width: artSize,
+                    height: artSize,
+                    backgroundColor: categoryAccentColor(podcast.categories),
+                  },
+                ]}
+              />
+            )}
+            {!!podcast &&
+              (isLearning && podcast.cefrLevel ? (
+                <View style={styles.cefrBadge}>
+                  <MaterialIcons name="school" size={12} color="#fff" />
+                  <Text style={styles.cefrBadgeText}>{podcast.cefrLevel}</Text>
+                </View>
+              ) : (
+                <View style={styles.aiBadge}>
+                  <MaterialIcons name="auto-awesome" size={11} color="#0714B8" />
+                  <Text style={styles.aiBadgeText}>AI ENHANCED</Text>
+                </View>
+              ))}
           </View>
-        ) : (
-          <View style={styles.aiBadge}>
-            <MaterialIcons name="auto-awesome" size={11} color="#0714B8" />
-            <Text style={styles.aiBadgeText}>AI ENHANCED</Text>
-          </View>
-        )}
-      </View>
 
           {/* Track Info */}
           <View style={styles.trackInfo}>
         <Text style={styles.trackTitle} numberOfLines={2}>
           {trackTitle}
         </Text>
-        <Text style={styles.trackMeta} numberOfLines={1}>
-          {trackMeta}
-        </Text>
+        {trackMeta.length > 0 ? (
+          <Text style={styles.trackMeta} numberOfLines={1}>
+            {trackMeta}
+          </Text>
+        ) : null}
       </View>
 
           {/* Progress Bar */}
@@ -709,6 +786,12 @@ const styles = StyleSheet.create({
 
   artImage: {
     borderRadius: 24,
+  },
+
+  artPlaceholder: {
+    backgroundColor: '#ECEEF2',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 
   aiBadge: {

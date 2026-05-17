@@ -1,5 +1,6 @@
 import {
   ActivityIndicator,
+  Image,
   ScrollView,
   StyleSheet,
   Text,
@@ -9,38 +10,25 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 
-import { getMyInterests } from '@/src/api/interests.api';
 import {
   getLatestPodcast,
   getRecentlyPlayed,
-  getRecommendedPodcasts,
+  getTrendingPodcasts,
   type PodcastSummary,
   type RecentlyPlayed,
 } from '@/src/api/podcasts.api';
 import { Colors } from '@/src/styles/colors';
 import FavoriteButton from '@/src/components/FavoriteButton';
+import RecentlyPlayedList from '@/src/components/RecentlyPlayedList';
 import { getUser } from '@/src/store/authStore';
+import { getProfile } from '@/src/api/user.api';
+import { categoryAccentColor as categoryColor } from '@/src/utils/categoryAccent';
 
 const POLL_INTERVAL_MS = 5000;
 
-const CATEGORY_COLORS: Record<string, string> = {
-  technology: '#1E3A8A',
-  ai: '#3730A3',
-  science: '#065F46',
-  health: '#7C2D12',
-  finance: '#78350F',
-  economy: '#374151',
-  sports: '#1E40AF',
-  music: '#581C87',
-  entertainment: '#831843',
-  world: '#134E4A',
-};
-
-function categoryColor(categories: string[]): string {
-  const first = (categories[0] ?? '').toLowerCase();
-  return CATEGORY_COLORS[first] ?? '#1E3A8A';
-}
+const TRENDING_SECTION_SUBTITLE = 'Popular on Listen Notes right now.';
 
 function formatDuration(seconds?: number | null): string {
   if (!seconds) return '';
@@ -48,27 +36,60 @@ function formatDuration(seconds?: number | null): string {
   return `${m} min`;
 }
 
-function formatProgress(progressSeconds: number, durationSeconds?: number | null, isCompleted?: boolean): string {
-  if (isCompleted) return 'Completed';
-  if (!durationSeconds || progressSeconds === 0) return 'Not started';
-  const remaining = Math.max(0, durationSeconds - progressSeconds);
-  const m = Math.round(remaining / 60);
-  return m <= 0 ? 'Almost done' : `${m}m left`;
+function RecommendedCoverArt({
+  uri,
+  fallbackColor,
+}: Readonly<{ uri: string | null; fallbackColor: string }>) {
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    setFailed(false);
+  }, [uri]);
+
+  if (!uri || failed) {
+    return (
+      <View style={[styles.recommendedCoverImage, { backgroundColor: fallbackColor }]} />
+    );
+  }
+
+  return (
+    <Image
+      source={{ uri }}
+      style={styles.recommendedCoverImage}
+      resizeMode="cover"
+      onError={() => setFailed(true)}
+    />
+  );
 }
 
-function StatusBadge({ status }: Readonly<{ status?: string | null }>) {
-  const isProcessing = status === 'processing';
+function HeroStatusBadge({ status }: Readonly<{ status?: string | null }>) {
+  const s = (status ?? '').toLowerCase();
+  const isProcessing = s === 'processing';
+  const isCompleted = s === 'completed';
+  const isFailed = s === 'failed';
+  const label = isProcessing
+    ? 'Processing…'
+    : isCompleted
+      ? 'Ready'
+      : isFailed
+        ? 'Generation failed'
+        : 'Updating…';
   return (
-    <View style={[styles.heroBadge, isProcessing && styles.heroBadgeProcessing]}>
+    <View
+      style={[
+        styles.heroBadge,
+        isProcessing && styles.heroBadgeProcessing,
+        isFailed && styles.heroBadgeFailed,
+      ]}>
       {isProcessing && <ActivityIndicator size={10} color="#fff" style={{ marginRight: 4 }} />}
-      <Text style={styles.heroBadgeText}>{isProcessing ? 'Processing…' : 'LIVE NOW'}</Text>
+      <Text style={styles.heroBadgeText}>{label}</Text>
     </View>
   );
 }
 
 function HeroSkeleton() {
   return (
-    <View style={[styles.heroCard, { justifyContent: 'center', alignItems: 'center', minHeight: 180 }]}>
+    <View style={[styles.heroCard, styles.heroCardSkeleton]}>
       <ActivityIndicator color="#fff" />
       <Text style={[styles.heroTime, { marginTop: 8 }]}>Loading latest podcast…</Text>
     </View>
@@ -78,7 +99,7 @@ function HeroSkeleton() {
 function HeroEmpty() {
   const router = useRouter();
   return (
-    <View style={[styles.heroCard, { alignItems: 'center', paddingVertical: 28 }]}>
+    <View style={[styles.heroCard, styles.heroCardEmpty]}>
       <Text style={[styles.heroTitle, { fontSize: 22, textAlign: 'center' }]}>
         No podcasts yet
       </Text>
@@ -92,17 +113,121 @@ function HeroEmpty() {
   );
 }
 
+function HeroLatestPodcastCard({ podcast }: Readonly<{ podcast: PodcastSummary }>) {
+  const router = useRouter();
+  const heroCover = podcast.coverImageUrl?.trim() || null;
+  const tint = categoryColor(podcast.categories);
+  const statusLc = (podcast.status ?? '').toLowerCase();
+  const isFailed = statusLc === 'failed';
+  const titleText =
+    podcast.status === 'processing' && !(podcast.title ?? '').trim()
+      ? 'Creating your podcast…'
+      : (podcast.title ?? 'Untitled podcast');
+  const categoryLine =
+    podcast.categories.length > 0
+      ? podcast.categories
+          .slice(0, 4)
+          .map((c) => c.toUpperCase())
+          .join(' · ')
+      : '';
+
+  return (
+    <View style={styles.heroCard}>
+      {heroCover ? (
+        <>
+          <Image source={{ uri: heroCover }} style={styles.heroBackdropImage} resizeMode="cover" />
+          <View style={styles.heroBackdropTint} />
+        </>
+      ) : (
+        <View style={[styles.heroBackdropImage, { backgroundColor: tint }]} />
+      )}
+      <View style={styles.heroCardInner}>
+        <View style={styles.heroTop}>
+          <HeroStatusBadge status={podcast.status} />
+          {podcast.status === 'completed' && podcast.durationSeconds != null && (
+            <Text style={styles.heroTime}>{formatDuration(podcast.durationSeconds)}</Text>
+          )}
+          {categoryLine.length > 0 && <Text style={styles.heroCategory}>{categoryLine}</Text>}
+        </View>
+        <Text style={styles.heroTitle} numberOfLines={3}>
+          {titleText}
+        </Text>
+        <View style={styles.heroButtons}>
+          {podcast.status === 'completed' && (
+            <>
+              <TouchableOpacity
+                style={styles.primaryBtn}
+                onPress={() => router.push({ pathname: '/player', params: { id: podcast.id } })}
+              >
+                <Text style={styles.primaryBtnText}>▶ Listen Now</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.secondaryBtn}
+                onPress={() => router.push({ pathname: '/podcast', params: { id: podcast.id } })}
+              >
+                <Text style={styles.secondaryBtnText}>◫ View Insights</Text>
+              </TouchableOpacity>
+            </>
+          )}
+          {isFailed && (
+            <>
+              <View style={styles.processingNote}>
+                <Text style={styles.processingNoteText}>
+                  This episode did not finish — often due to AI quota or a temporary service limit.
+                  For a few minutes this stays visible here; then your last successful episode shows
+                  again.
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={styles.primaryBtn}
+                activeOpacity={0.85}
+                onPress={() => router.push('/create')}
+              >
+                <Text style={styles.primaryBtnText}>Create new</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.secondaryBtn}
+                activeOpacity={0.85}
+                onPress={() => router.push({ pathname: '/podcast', params: { id: podcast.id } })}
+              >
+                <Text style={styles.secondaryBtnText}>View details</Text>
+              </TouchableOpacity>
+            </>
+          )}
+          {!isFailed && podcast.status !== 'completed' && (
+            <>
+              <View style={styles.processingNote}>
+                <Text style={styles.processingNoteText}>
+                  You can leave this screen—we&apos;ll keep working on your episode. Usually 1–2
+                  minutes.
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={styles.secondaryBtn}
+                activeOpacity={0.85}
+                onPress={() => router.push({ pathname: '/podcast', params: { id: podcast.id } })}
+              >
+                <Text style={styles.secondaryBtnText}>View progress</Text>
+              </TouchableOpacity>
+            </>
+          )}
+        </View>
+      </View>
+    </View>
+  );
+}
+
 export default function HomeScreen() {
   const router = useRouter();
 
   const [latestPodcast, setLatestPodcast] = useState<PodcastSummary | null | undefined>(undefined);
-  const [recommended, setRecommended] = useState<PodcastSummary[]>([]);
+  const [trending, setTrending] = useState<PodcastSummary[]>([]);
   const [recentlyPlayed, setRecentlyPlayed] = useState<RecentlyPlayed[]>([]);
-  const [interestText, setInterestText] = useState('Based on your interests');
 
   const [loadingLatest, setLoadingLatest] = useState(true);
-  const [loadingRec, setLoadingRec] = useState(true);
+  const [loadingTrending, setLoadingTrending] = useState(true);
   const [loadingRecent, setLoadingRecent] = useState(true);
+  const [profilePhotoUrl, setProfilePhotoUrl] = useState<string | null>(null);
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -112,6 +237,8 @@ export default function HomeScreen() {
     if (!fullName) return 'there';
     return fullName.split(' ')[0] || fullName;
   }, [user?.fullName]);
+
+  const recentPreview = useMemo(() => recentlyPlayed.slice(0, 5), [recentlyPlayed]);
 
   // --- Fetch latest podcast (+ poll while processing) ---
   const fetchLatest = useCallback(async () => {
@@ -157,35 +284,63 @@ export default function HomeScreen() {
     pollRef.current = null;
   }, [latestPodcast?.status, startPolling]);
 
-  // --- Fetch recommended + interests ---
+  // Failed hero: backend switches to previous completed episode after ~5 min — poll every 15s so UI catches it quickly.
+  useEffect(() => {
+    if (latestPodcast?.status?.toLowerCase() !== 'failed') return;
+    void fetchLatest();
+    const id = setInterval(() => {
+      void fetchLatest();
+    }, 15000);
+    return () => clearInterval(id);
+  }, [latestPodcast?.status, fetchLatest]);
+
+  // --- Trending (Listen Notes best_podcasts; API returns up to 10 via /recommended) ---
   useEffect(() => {
     const load = async () => {
       try {
-        const [recs, myInterests] = await Promise.all([
-          getRecommendedPodcasts(),
-          getMyInterests(),
-        ]);
-        setRecommended(recs);
-        if (myInterests.length > 0) {
-          const names = myInterests.slice(0, 3).map((i) => i.name);
-          setInterestText(`Based on your interests: ${names.join(', ')}`);
-        }
+        const rows = await getTrendingPodcasts();
+        setTrending(rows);
       } catch {
-        setRecommended([]);
+        setTrending([]);
       } finally {
-        setLoadingRec(false);
+        setLoadingTrending(false);
       }
     };
     load();
   }, []);
 
-  // --- Fetch recently played ---
-  useEffect(() => {
-    getRecentlyPlayed()
-      .then(setRecentlyPlayed)
-      .catch(() => setRecentlyPlayed([]))
-      .finally(() => setLoadingRecent(false));
-  }, []);
+  // --- Recently played + header avatar (Profile'dan dönünce foto güncellenir) ---
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      setLoadingRecent(true);
+
+      fetchLatest();
+
+      getRecentlyPlayed()
+        .then((list) => {
+          if (!cancelled) setRecentlyPlayed(list);
+        })
+        .catch(() => {
+          if (!cancelled) setRecentlyPlayed([]);
+        })
+        .finally(() => {
+          if (!cancelled) setLoadingRecent(false);
+        });
+
+      getProfile()
+        .then((p) => {
+          if (!cancelled) setProfilePhotoUrl(p.photoUrl?.trim() ? p.photoUrl : null);
+        })
+        .catch(() => {
+          if (!cancelled) setProfilePhotoUrl(null);
+        });
+
+      return () => {
+        cancelled = true;
+      };
+    }, [fetchLatest]),
+  );
 
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
@@ -195,62 +350,34 @@ export default function HomeScreen() {
           <Text style={styles.brand}>PodcastAI</Text>
           <View style={styles.headerActions}>
             <Text style={styles.iconText}>⌕</Text>
-            <View style={styles.avatarDot} />
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={() => router.push('/(tabs)/profile')}
+              accessibilityLabel="Profile">
+              {profilePhotoUrl ? (
+                <Image source={{ uri: profilePhotoUrl }} style={styles.headerAvatarImg} />
+              ) : (
+                <View style={styles.avatarDot} />
+              )}
+            </TouchableOpacity>
           </View>
         </View>
 
-        <Text style={styles.greeting}>Merhaba, {displayName}!</Text>
+        <Text style={styles.greeting}>Hello, {displayName}!</Text>
         <Text style={styles.subtitle}>Your AI Curator has new insights for you today.</Text>
 
-        {/* ── Today's Tech ── */}
-        {loadingLatest && <HeroSkeleton />}
-        {!loadingLatest && latestPodcast && (
-          <View style={[styles.heroCard, { backgroundColor: categoryColor(latestPodcast.categories) }]}>
-            <View style={styles.heroTop}>
-              <StatusBadge status={latestPodcast.status} />
-              {latestPodcast.durationSeconds != null && (
-                <Text style={styles.heroTime}>{formatDuration(latestPodcast.durationSeconds)}</Text>
-              )}
-              {latestPodcast.categories.length > 0 && (
-                <Text style={styles.heroCategory}>{latestPodcast.categories[0].toUpperCase()}</Text>
-              )}
-            </View>
-            <Text style={styles.heroTitle} numberOfLines={3}>
-              {latestPodcast.title ?? "Today's Briefing"}
-            </Text>
-          <View style={styles.heroButtons}>
-            {latestPodcast.status === 'completed' && (
-              <>
-                <TouchableOpacity
-                  style={styles.primaryBtn}
-                  onPress={() => router.push({ pathname: '/player', params: { id: latestPodcast.id } })}
-                >
-                  <Text style={styles.primaryBtnText}>▶ Listen Now</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.secondaryBtn}
-                  onPress={() => router.push({ pathname: '/podcast', params: { id: latestPodcast.id } })}
-                >
-                  <Text style={styles.secondaryBtnText}>◫ View Insights</Text>
-                </TouchableOpacity>
-              </>
-            )}
-            {latestPodcast.status !== 'completed' && (
-              <View style={styles.processingNote}>
-                <Text style={styles.processingNoteText}>
-                  Your podcast is being prepared. This usually takes 1–2 minutes.
-                </Text>
-              </View>
-            )}
-          </View>
-        </View>
+        {(loadingLatest || latestPodcast) && (
+          <Text style={styles.heroSectionLabel}>Your latest podcast</Text>
         )}
+
+        {loadingLatest && <HeroSkeleton />}
+        {!loadingLatest && latestPodcast && <HeroLatestPodcastCard podcast={latestPodcast} />}
         {!loadingLatest && !latestPodcast && <HeroEmpty />}
 
-        {/* ── Recommended for You ── */}
+        {/* ── Trending ── */}
         <View>
           <View style={styles.recSubRow}>
-            <Text style={styles.sectionTitle}>Recommended for You</Text>
+            <Text style={styles.sectionTitle}>Trending</Text>
             <TouchableOpacity
               style={styles.viewAllBtn}
               activeOpacity={0.75}
@@ -259,61 +386,89 @@ export default function HomeScreen() {
               <Text style={styles.viewAllBtnText}>View All</Text>
             </TouchableOpacity>
           </View>
-          <Text style={styles.sectionSubtext}>{interestText}</Text>
+          <Text style={styles.sectionSubtext}>{TRENDING_SECTION_SUBTITLE}</Text>
         </View>
 
-        {loadingRec && (
+        {loadingTrending && (
           <View style={styles.centeredLoader}>
             <ActivityIndicator color={Colors.primary} />
           </View>
         )}
-        {!loadingRec && recommended.length === 0 && (
+        {!loadingTrending && trending.length === 0 && (
           <View style={styles.emptyCard}>
             <Text style={styles.emptyText}>
-              Complete a podcast to see personalized recommendations.
+              Trending podcasts are unavailable right now. Try again in a moment.
             </Text>
           </View>
         )}
-        {!loadingRec && recommended.length > 0 && (
+        {!loadingTrending && trending.length > 0 && (
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.recommendedRow}
           >
-            {recommended.map((item) => (
-              <TouchableOpacity
-                key={item.id}
-                style={styles.recommendedCard}
-                activeOpacity={0.85}
-                onPress={() => router.push({ pathname: '/podcast', params: { id: item.id } })}
-              >
-                <View
-                  style={[
-                    styles.recommendedImagePlaceholder,
-                    { backgroundColor: categoryColor(item.categories) },
-                  ]}
+            {trending.map((item) => {
+              const coverUri = item.coverImageUrl?.trim() || null;
+              const isExternal = item.status?.toLowerCase() === 'external';
+              const categoryLabel =
+                (item.publisher?.trim() || item.categories[0] || '').trim();
+              const openRecommended = () => {
+                if (isExternal) {
+                  const ln = item.listenNotesPodcastId?.trim();
+                  if (ln) {
+                    router.push({ pathname: '/podcast', params: { lnId: ln } });
+                    return;
+                  }
+                }
+                router.push({ pathname: '/podcast', params: { id: item.id } });
+              };
+
+              return (
+                <TouchableOpacity
+                  key={item.id}
+                  style={styles.recommendedCard}
+                  activeOpacity={0.85}
+                  onPress={openRecommended}
                 >
-                  <Text style={styles.recommendedPlaceholderIcon}>🎙</Text>
-                </View>
-                <View style={styles.recommendedFavBtn}>
-                  <FavoriteButton size={15} />
-                </View>
-                {item.categories.length > 0 && (
-                  <Text style={styles.recommendedCategory}>
-                    {item.categories[0].toUpperCase()}
+                  <View style={styles.recommendedCoverWrap}>
+                    <RecommendedCoverArt
+                      uri={coverUri}
+                      fallbackColor={categoryColor(item.categories)}
+                    />
+                    <View style={styles.recommendedFavBtn}>
+                      {!isExternal ? <FavoriteButton size={15} /> : null}
+                    </View>
+                  </View>
+                  {categoryLabel.length > 0 && (
+                    <Text style={styles.recommendedCategory}>
+                      {categoryLabel.toUpperCase()}
+                    </Text>
+                  )}
+                  <Text numberOfLines={2} style={styles.recommendedTitle}>
+                    {item.title ?? 'Untitled Podcast'}
                   </Text>
-                )}
-                <Text numberOfLines={2} style={styles.recommendedTitle}>
-                  {item.title ?? 'Untitled Podcast'}
-                </Text>
-                <Text style={styles.recommendedMeta}>{formatDuration(item.durationSeconds)}</Text>
-              </TouchableOpacity>
-            ))}
+                  <Text style={styles.recommendedMeta}>{formatDuration(item.durationSeconds)}</Text>
+                </TouchableOpacity>
+              );
+            })}
           </ScrollView>
         )}
 
-        {/* ── Recently Played ── */}
-        <Text style={styles.sectionTitle}>Recently Played</Text>
+        {/* ── Recently Played (preview: 5) ── */}
+        <View>
+          <View style={styles.recSubRow}>
+            <Text style={styles.sectionTitle}>Recently Played</Text>
+            {recentlyPlayed.length > 5 ? (
+              <TouchableOpacity
+                style={styles.viewAllBtn}
+                activeOpacity={0.75}
+                onPress={() => router.push('/recently-played')}
+              >
+                <Text style={styles.viewAllBtnText}>View All</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        </View>
 
         {loadingRecent && (
           <View style={styles.centeredLoader}>
@@ -323,40 +478,12 @@ export default function HomeScreen() {
         {!loadingRecent && recentlyPlayed.length === 0 && (
           <View style={styles.emptyCard}>
             <Text style={styles.emptyText}>
-              You haven't listened to any podcasts yet.{'\n'}Start listening to track your history.
+              You haven&apos;t listened to any podcasts yet.{'\n'}Start listening to track your history.
             </Text>
           </View>
         )}
         {!loadingRecent && recentlyPlayed.length > 0 && (
-          <View style={styles.listWrap}>
-            {recentlyPlayed.map((item) => (
-              <TouchableOpacity
-                key={item.podcastId}
-                style={styles.listItem}
-                activeOpacity={0.8}
-                onPress={() => router.push({ pathname: '/podcast', params: { id: item.podcastId } })}
-              >
-                <View
-                  style={[
-                    styles.thumb,
-                    { backgroundColor: categoryColor(item.categories), justifyContent: 'center', alignItems: 'center' },
-                  ]}
-                >
-                  <Text style={{ fontSize: 20 }}>🎙</Text>
-                </View>
-                <View style={styles.listContent}>
-                  <Text numberOfLines={1} style={styles.listTitle}>
-                    {item.title ?? 'Untitled Podcast'}
-                  </Text>
-                  <Text style={styles.listSubtitle}>
-                    {item.categories[0] ?? 'Podcast'} ·{' '}
-                    {formatProgress(item.progressSeconds, item.durationSeconds, item.isCompleted)}
-                  </Text>
-                </View>
-                <Text style={styles.chevron}>›</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+          <RecentlyPlayedList items={recentPreview} />
         )}
       </ScrollView>
     </SafeAreaView>
@@ -399,6 +526,12 @@ const styles = StyleSheet.create({
     borderRadius: 13,
     backgroundColor: '#0F172A',
   },
+  headerAvatarImg: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#E2E8F0',
+  },
   greeting: {
     fontSize: 34,
     lineHeight: 38,
@@ -412,11 +545,45 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
   },
+  heroSectionLabel: {
+    marginTop: 14,
+    marginBottom: 2,
+    fontSize: 13,
+    fontWeight: '700',
+    color: Colors.textMuted,
+    letterSpacing: 0.3,
+  },
   heroCard: {
-    marginTop: 4,
+    marginTop: 8,
     borderRadius: 20,
-    padding: 16,
+    overflow: 'hidden',
+    minHeight: 220,
     backgroundColor: '#1E3A8A',
+    position: 'relative',
+  },
+  heroCardSkeleton: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  heroCardEmpty: {
+    alignItems: 'center',
+    paddingVertical: 28,
+    paddingHorizontal: 16,
+  },
+  heroBackdropImage: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 20,
+  },
+  heroBackdropTint: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 20,
+    backgroundColor: 'rgba(15,23,42,0.52)',
+  },
+  heroCardInner: {
+    padding: 16,
+    position: 'relative',
+    zIndex: 1,
   },
   heroTop: {
     flexDirection: 'row',
@@ -434,6 +601,9 @@ const styles = StyleSheet.create({
   },
   heroBadgeProcessing: {
     backgroundColor: 'rgba(251,191,36,0.25)',
+  },
+  heroBadgeFailed: {
+    backgroundColor: 'rgba(239,68,68,0.35)',
   },
   heroBadgeText: {
     color: '#fff',
@@ -566,16 +736,16 @@ const styles = StyleSheet.create({
     position: 'relative',
     width: 195,
   },
-  recommendedImagePlaceholder: {
+  recommendedCoverWrap: {
+    position: 'relative',
+    width: '100%',
+    marginBottom: 8,
+  },
+  recommendedCoverImage: {
     width: '100%',
     height: 220,
     borderRadius: 16,
-    marginBottom: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  recommendedPlaceholderIcon: {
-    fontSize: 52,
+    backgroundColor: '#E8ECF3',
   },
   recommendedFavBtn: {
     position: 'absolute',
@@ -599,42 +769,5 @@ const styles = StyleSheet.create({
     marginTop: 2,
     color: Colors.textMuted,
     fontSize: 12,
-  },
-  listWrap: {
-    gap: 10,
-  },
-  listItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.surface,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    padding: 10,
-    gap: 10,
-  },
-  thumb: {
-    width: 44,
-    height: 44,
-    borderRadius: 10,
-    backgroundColor: '#B9C6E7',
-  },
-  listContent: {
-    flex: 1,
-    gap: 2,
-  },
-  listTitle: {
-    color: Colors.text,
-    fontWeight: '700',
-    fontSize: 13,
-  },
-  listSubtitle: {
-    color: Colors.textMuted,
-    fontSize: 12,
-  },
-  chevron: {
-    color: '#94A3B8',
-    fontSize: 22,
-    lineHeight: 22,
   },
 });
