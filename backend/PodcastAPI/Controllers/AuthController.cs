@@ -80,6 +80,7 @@ public class AuthController(
             FullName = user.FullName,
             Email = user.Email,
             Token = token,
+
         });
     }
 }

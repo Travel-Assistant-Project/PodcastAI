@@ -27,6 +27,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.Property(e => e.PasswordHash).HasColumnName("passwordhash");
             entity.Property(e => e.Age).HasColumnName("age");
             entity.Property(e => e.Occupation).HasColumnName("job");
+            entity.Property(e => e.PreferredMode).HasColumnName("preferredmode").HasMaxLength(10);
+            entity.Property(e => e.CefrLevel).HasColumnName("cefrlevel").HasMaxLength(4);
             entity.Property(e => e.CreatedAt).HasColumnName("createdat");
         });
 
