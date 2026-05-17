@@ -6,6 +6,7 @@ using PodcastAPI.Services;
 using PodcastAPI.Services.AiService;
 using Hangfire;
 using Hangfire.PostgreSql;
+using PodcastAPI.Services.External;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -51,6 +52,14 @@ builder.Services.AddSwaggerGen();
 builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<IPasswordHasher, PasswordHasherService>();
 builder.Services.AddScoped<IPodcastGeneratorJob, PodcastGeneratorJob>();
+
+// Listen Notes API için HttpClient ve Servis Kaydı
+var listenNotesKey = Env.GetString("LISTEN_NOTES_API_KEY");
+builder.Services.AddHttpClient<IExternalPodcastService, ListenNotesService>(client =>
+{
+    client.BaseAddress = new Uri("https://listen-api.listennotes.com/api/v2/");
+    client.DefaultRequestHeaders.Add("X-ListenAPI-Key", listenNotesKey);
+});
 
 // AI Microservice için HTTP istemcisi
 var aiServiceSecret = Env.GetString("AI_SERVICE_SECRET");
