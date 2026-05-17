@@ -8,6 +8,7 @@
 
   <ItemGroup>
     <PackageReference Include="DotNetEnv" Version="3.1.1" />
+    <PackageReference Include="Google.Cloud.Storage.V1" Version="4.13.0" />
     <PackageReference Include="Hangfire" Version="1.8.23" />
     <PackageReference Include="Hangfire.AspNetCore" Version="1.8.23" />
     <PackageReference Include="Hangfire.PostgreSql" Version="1.21.1" />

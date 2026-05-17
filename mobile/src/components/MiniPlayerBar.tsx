@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { View, Text, StyleSheet, Pressable, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, Pressable, TouchableOpacity, Image } from 'react-native';
 import { useRouter, useSegments, usePathname } from 'expo-router';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -31,12 +31,14 @@ export default function MiniPlayerBar() {
   const insets = useSafeAreaInsets();
   const playback = usePlayback();
 
-  const AUTH_PATHS = new Set(['/', '/login', '/register']);
+  const inTabs = segments[0] === '(tabs)';
+  // Tabs "Home" can still report pathname "/"; Welcome uses "/" too but sits outside (tabs).
   const isAuthScreen =
-    AUTH_PATHS.has(pathname) ||
-    segments[0] === 'index' ||
+    pathname === '/login' ||
+    pathname === '/register' ||
     segments[0] === 'login' ||
-    segments[0] === 'register';
+    segments[0] === 'register' ||
+    (!inTabs && (pathname === '/' || pathname === ''));
 
   const hide = useMemo(() => {
     if (!playback.track) return true;
@@ -62,17 +64,33 @@ export default function MiniPlayerBar() {
   const track = playback.track;
   const { isPlaying, isLoading, positionMs, durationMs, togglePlayPause } = playback;
   const progress = durationMs > 0 ? positionMs / durationMs : 0;
+  const miniCover = track.coverImageUrl?.trim() || null;
 
   return (
     <View style={[styles.shell, { bottom: bottomOffset }]} pointerEvents="box-none">
       <Pressable
         style={styles.bar}
-        onPress={() =>
-          router.push({ pathname: '/player', params: { id: track.podcastId } })
-        }
+        onPress={() => {
+          const ln = track.listenNotesPodcastId?.trim();
+          const lnEp = track.listenNotesEpisodeId?.trim();
+          router.push({
+            pathname: '/player',
+            params: ln
+              ? {
+                  id: track.podcastId,
+                  lnId: ln,
+                  ...(lnEp ? { lnEpisodeId: lnEp } : {}),
+                }
+              : { id: track.podcastId },
+          });
+        }}
         android_ripple={{ color: 'rgba(7,20,184,0.12)' }}>
         <View style={styles.thumb}>
-          <MaterialIcons name="graphic-eq" size={22} color="#0714B8" />
+          {miniCover ? (
+            <Image source={{ uri: miniCover }} style={styles.thumbImage} />
+          ) : (
+            <MaterialIcons name="graphic-eq" size={22} color="#0714B8" />
+          )}
         </View>
         <View style={styles.textCol}>
           <Text style={styles.title} numberOfLines={1}>
@@ -141,6 +159,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#EEF1FF',
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  thumbImage: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
   },
   textCol: {
     flex: 1,

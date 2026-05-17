@@ -23,6 +23,7 @@ export default function RootLayout() {
         <Stack.Screen name="register" options={{ headerShown: false }} />
         <Stack.Screen name="words" options={{ headerShown: false }} />
         <Stack.Screen name="past-podcasts" options={{ headerShown: false }} />
+        <Stack.Screen name="recently-played" options={{ headerShown: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="category" options={{ headerShown: false }} />
         <Stack.Screen name="podcast" options={{ headerShown: false }} />

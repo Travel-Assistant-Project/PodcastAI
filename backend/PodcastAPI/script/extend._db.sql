@@ -91,11 +91,16 @@ CREATE TABLE IF NOT EXISTS userquizattempts (
 ALTER TABLE users DROP COLUMN IF EXISTS preferredmode;
 ALTER TABLE users DROP COLUMN IF EXISTS cefrlevel;
 
--- 16.05.2026: Profil fotoğrafı URL'i.
+-- 16.05.2026: Profil fotoğrafı URL'i (mobil kalemden yükleme → POST /api/user/profile-photo → users.photourl).
 ALTER TABLE users ADD COLUMN IF NOT EXISTS photourl TEXT;
+
+-- 17.05.2026: Podcast kapakları — Firebase Storage podcast-covers/&lt;kategori&gt;/ klasörleri.
+ALTER TABLE podcasts ADD COLUMN IF NOT EXISTS coverimageobjectkey TEXT;
 
 -- 16.05.2026: Dinleme geçmişi (Recently Played + "kaldığı yer" takibi).
 -- Kullanıcının hangi podcast'i, ne kadar dinlediğini ve tamamlayıp tamamlamadığını tutar.
+-- Mobil oynatıcı POST /api/podcasts/{id}/play ile ProgressSeconds günceller;
+-- GET podcast detayı ve GET recently-played bu tablodan okur (migration yok, şema elle güncellenir).
 CREATE TABLE IF NOT EXISTS listeninghistory (
     id              SERIAL PRIMARY KEY,
     userid          UUID         NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -107,3 +112,25 @@ CREATE TABLE IF NOT EXISTS listeninghistory (
 );
 
 CREATE INDEX IF NOT EXISTS idx_listeninghistory_user ON listeninghistory(userid, lastlistenedat DESC);
+
+-- 17.05.2026: Listen Notes bölümü dinleme konumu (podcasts tablosunda satır yok).
+CREATE TABLE IF NOT EXISTS external_listening_history (
+    id                       SERIAL PRIMARY KEY,
+    userid                   UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    listen_notes_episode_id  VARCHAR(64) NOT NULL,
+    listen_notes_podcast_id  VARCHAR(64) NOT NULL,
+    title                    TEXT,
+    audiourl                 TEXT,
+    durationseconds          INT,
+    coverimageurl            TEXT,
+    categoryblob             VARCHAR(500),
+    progressseconds          INT NOT NULL DEFAULT 0,
+    iscompleted              BOOLEAN NOT NULL DEFAULT FALSE,
+    lastlistenedat           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(userid, listen_notes_episode_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_external_listening_user ON external_listening_history(userid, lastlistenedat DESC);
+
+-- 17.05.2026: Başarısız üretim zamanı — GET /podcasts/latest ana sayfa hero için (5 dk sonra önceki tamamlanan bölüm).
+ALTER TABLE podcasts ADD COLUMN IF NOT EXISTS failedat TIMESTAMP WITH TIME ZONE;

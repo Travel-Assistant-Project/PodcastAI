@@ -15,6 +15,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<WordTranslationCache> WordTranslationCache { get; set; }
     public DbSet<UserQuizAttempt> UserQuizAttempts { get; set; }
     public DbSet<ListeningHistory> ListeningHistories { get; set; }
+    public DbSet<ExternalListeningHistory> ExternalListeningHistories { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -67,12 +68,14 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.Property(e => e.SpeakerCount).HasColumnName("speakercount");
             entity.Property(e => e.Status).HasColumnName("status").HasMaxLength(20);
             entity.Property(e => e.CategoryName).HasColumnName("categoryname").HasMaxLength(50);
+            entity.Property(e => e.CoverImageObjectKey).HasColumnName("coverimageobjectkey");
             entity.Property(e => e.CefrLevel).HasColumnName("cefrlevel").HasMaxLength(4);
             entity.Property(e => e.LearningMode).HasColumnName("learningmode");
             entity.Property(e => e.TranscriptJson)
                   .HasColumnName("transcriptjson")
                   .HasColumnType("jsonb");
             entity.Property(e => e.CreatedAt).HasColumnName("createdat");
+            entity.Property(e => e.FailedAt).HasColumnName("failedat");
 
             entity.HasMany(e => e.Sources)
                   .WithOne()
@@ -176,6 +179,26 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                   .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasIndex(e => new { e.UserId, e.PodcastId }).IsUnique();
+        });
+
+        modelBuilder.Entity<ExternalListeningHistory>(entity =>
+        {
+            entity.ToTable("external_listening_history", t => t.ExcludeFromMigrations());
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("id");
+            entity.Property(e => e.UserId).HasColumnName("userid");
+            entity.Property(e => e.ListenNotesEpisodeId).HasColumnName("listen_notes_episode_id").HasMaxLength(64).IsRequired();
+            entity.Property(e => e.ListenNotesPodcastId).HasColumnName("listen_notes_podcast_id").HasMaxLength(64).IsRequired();
+            entity.Property(e => e.Title).HasColumnName("title");
+            entity.Property(e => e.AudioUrl).HasColumnName("audiourl");
+            entity.Property(e => e.DurationSeconds).HasColumnName("durationseconds");
+            entity.Property(e => e.CoverImageUrl).HasColumnName("coverimageurl");
+            entity.Property(e => e.CategoryBlob).HasColumnName("categoryblob").HasMaxLength(500);
+            entity.Property(e => e.ProgressSeconds).HasColumnName("progressseconds");
+            entity.Property(e => e.IsCompleted).HasColumnName("iscompleted");
+            entity.Property(e => e.LastListenedAt).HasColumnName("lastlistenedat");
+
+            entity.HasIndex(e => new { e.UserId, e.ListenNotesEpisodeId }).IsUnique();
         });
 
     }
