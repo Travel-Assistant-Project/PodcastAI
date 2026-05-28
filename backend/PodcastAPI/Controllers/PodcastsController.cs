@@ -26,7 +26,6 @@ public class PodcastsController(
 {
     private static readonly JsonSerializerOptions TranscriptJsonOptions = new(JsonSerializerDefaults.Web);
 
-    /// <summary>Postgres/Npgsql sıklıkla Unspecified döner; karşılaştırmayı UTC ile sabitle.</summary>
     private static DateTime ToUtcAssumeStoredUtc(DateTime dt) =>
         dt.Kind switch
         {
@@ -35,31 +34,70 @@ public class PodcastsController(
             _ => DateTime.SpecifyKind(dt, DateTimeKind.Utc),
         };
 
-    // POST: api/podcasts/generate - Kendi AI Podcast'ini üretir
     [HttpPost("generate")]
     public async Task<ActionResult> Generate([FromBody] GeneratePodcastRequestDto request)
     {
         if (!TryGetUserId(out var userId)) return Unauthorized(new { message = "Invalid token." });
 
+        // 1. Kategorileri normalize et ve alfabetik sırala (Dizilim bağımsızlığı / Array Order Insensitivity için)
+        var normalizedCategories = request.Categories
+            .Select(c => c.Trim().ToLowerInvariant())
+            .OrderBy(c => c)
+            .ToList();
+
+        var categorySearchString = string.Join(PodcastConstants.CategorySeparator, normalizedCategories);
+        var requestTone = request.Tone.Trim().ToLowerInvariant();
+        var requestCefr = request.LearningMode ? request.CefrLevel?.Trim().ToUpperInvariant() : null;
+
+        // 2. Bugünün UTC başlangıç ve bitiş sınırlarını belirle
+        var todayUtc = DateTime.UtcNow.Date;
+        var tomorrowUtc = todayUtc.AddDays(1);
+
+        // 3. Issue #11 & #32 Entegre Kontrolü: 
+        // Kullanıcı yeniden oluşturma istemediyse (!ForceRecreate) bugünkü mevcut kaydı ara.
+        if (!request.ForceRecreate)
+        {
+            var existingPodcast = await db.Podcasts
+                .Where(p => p.UserId == userId &&
+                            p.CategoryName == categorySearchString &&
+                            p.Tone == requestTone &&
+                            p.LearningMode == request.LearningMode &&
+                            p.CefrLevel == requestCefr &&
+                            p.SpeakerCount == request.SpeakerCount &&
+                            p.CreatedAt >= todayUtc && p.CreatedAt < tomorrowUtc &&
+                            p.Status != PodcastConstants.Status.Failed) // Başarısız işleri cache'ten getirme
+                .OrderByDescending(p => p.CreatedAt)
+                .FirstOrDefaultAsync();
+
+            if (existingPodcast != null)
+            {
+                return Ok(new
+                {
+                    podcastId = existingPodcast.Id,
+                    status = existingPodcast.Status,
+                    message = "Fetched from existing daily records (Cache Hit)."
+                });
+            }
+        }
+
+        // 4. DB'de yoksa veya ForceRecreate true ise yeni üretim başlat
         var podcast = new Podcast
         {
             Id = Guid.NewGuid(),
             UserId = userId,
-            Tone = request.Tone.Trim().ToLowerInvariant(),
+            Tone = requestTone,
             SpeakerCount = request.SpeakerCount,
             Status = PodcastConstants.Status.Processing,
-            CategoryName = string.Join(PodcastConstants.CategorySeparator, request.Categories),
+            CategoryName = categorySearchString,
             LearningMode = request.LearningMode,
-            CefrLevel = request.LearningMode
-                ? request.CefrLevel?.Trim().ToUpperInvariant()
-                : null,
+            CefrLevel = requestCefr,
             CreatedAt = DateTime.UtcNow
         };
 
         var snapshot = await podcastCoverPoolService.GetPoolsSnapshotAsync(HttpContext.RequestAborted);
         podcast.CoverImageObjectKey = PodcastCoverPicker.PickFromPools(
             snapshot.ObjectKeysByCategory,
-            request.Categories,
+            normalizedCategories,
             podcast.Id);
 
         db.Podcasts.Add(podcast);
@@ -70,25 +108,21 @@ public class PodcastsController(
         return Accepted(new { podcastId = podcast.Id, status = podcast.Status });
     }
 
-    // GET: api/podcasts/listen-notes/{listenNotesPodcastId} — Listen Notes şov detayı + bölüm sesi (?episodeId= ile resume)
     [HttpGet("listen-notes/{listenNotesPodcastId}")]
     public async Task<ActionResult<PodcastDetailDto>> GetListenNotesPodcast(
         string listenNotesPodcastId,
         [FromQuery] string? episodeId,
         CancellationToken cancellationToken)
     {
-        if (!TryGetUserId(out var userId))
-            return Unauthorized(new { message = "Invalid token." });
-
-        if (string.IsNullOrWhiteSpace(listenNotesPodcastId))
-            return BadRequest(new { message = "Missing Listen Notes podcast id." });
+        if (!TryGetUserId(out var userId)) return Unauthorized(new { message = "Invalid token." });
+        if (string.IsNullOrWhiteSpace(listenNotesPodcastId)) return BadRequest(new { message = "Missing Listen Notes podcast id." });
 
         var dto = await externalPodcastService.GetPodcastDetailAsync(
             listenNotesPodcastId.Trim(),
             episodeId?.Trim(),
             HttpContext.RequestAborted);
-        if (dto == null)
-            return NotFound(new { message = "Podcast not found or Listen Notes unavailable." });
+
+        if (dto == null) return NotFound(new { message = "Podcast not found or Listen Notes unavailable." });
 
         if (!string.IsNullOrWhiteSpace(dto.ListenNotesEpisodeId))
         {
@@ -108,7 +142,6 @@ public class PodcastsController(
         return Ok(dto);
     }
 
-    // GET: api/podcasts/{id} - Podcast detayını getirir
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<PodcastDetailDto>> GetById(Guid id)
     {
@@ -133,8 +166,6 @@ public class PodcastsController(
 
         return Ok(dto);
     }
-
-    // GET: api/podcasts - Kullanıcının kendi ürettiği podcastleri listeler
     [HttpGet]
     public async Task<ActionResult<List<PodcastSummaryDto>>> GetAll(CancellationToken cancellationToken)
     {
@@ -167,25 +198,21 @@ public class PodcastsController(
         if (latest == null) return NoContent();
 
         var hero = latest;
-
         if (string.Equals(latest.Status, PodcastConstants.Status.Failed, StringComparison.OrdinalIgnoreCase))
         {
             var anchor = ToUtcAssumeStoredUtc(latest.FailedAt ?? latest.CreatedAt);
             if (DateTime.UtcNow - anchor >= TimeSpan.FromMinutes(5))
             {
-                // Başarısız kayıt dışında en son tamamlanan bölüm (CreatedAt sıralaması bazen tz/kıyas yüzünden `< latest` ile kaçmasın).
                 var prevCompleted = await db.Podcasts
                     .AsNoTracking()
-                    .Where(p =>
-                        p.UserId == userId
-                        && p.Id != latest.Id
-                        && p.Status != null
-                        && p.Status.ToLower() == PodcastConstants.Status.Completed)
+                    .Where(p => p.UserId == userId
+                                && p.Id != latest.Id
+                                && p.Status != null
+                                && p.Status.ToLower() == PodcastConstants.Status.Completed)
                     .OrderByDescending(p => p.CreatedAt)
                     .FirstOrDefaultAsync(cancellationToken);
 
-                if (prevCompleted != null)
-                    hero = prevCompleted;
+                if (prevCompleted != null) hero = prevCompleted;
             }
         }
 
@@ -197,13 +224,11 @@ public class PodcastsController(
     {
         if (!TryGetUserId(out var userId)) return Unauthorized(new { message = "Invalid token." });
 
-        var external = DedupeExternal(
-                await externalPodcastService.GetBestPodcastsAsync(null, cancellationToken: cancellationToken))
+        var external = DedupeExternal(await externalPodcastService.GetBestPodcastsAsync(null, cancellationToken: cancellationToken))
             .Take(10)
             .ToList();
 
-        if (external.Count > 0)
-            return Ok(external);
+        if (external.Count > 0) return Ok(external);
 
         var fallbackEntities = await db.Podcasts
             .AsNoTracking()
@@ -226,13 +251,10 @@ public class PodcastsController(
         foreach (var x in items)
         {
             var key = x.ListenNotesUrl ?? x.AudioUrl ?? x.Title ?? "";
-            if (string.IsNullOrWhiteSpace(key))
-                continue;
-            if (!seen.Add(key))
-                continue;
+            if (string.IsNullOrWhiteSpace(key)) continue;
+            if (!seen.Add(key)) continue;
             result.Add(x);
         }
-
         return result;
     }
 
@@ -244,9 +266,7 @@ public class PodcastsController(
         var podcastExists = await db.Podcasts.AnyAsync(p => p.Id == id && p.UserId == userId);
         if (!podcastExists) return NotFound();
 
-        var history = await db.ListeningHistories
-            .FirstOrDefaultAsync(h => h.UserId == userId && h.PodcastId == id);
-
+        var history = await db.ListeningHistories.FirstOrDefaultAsync(h => h.UserId == userId && h.PodcastId == id);
         if (history == null)
         {
             history = new ListeningHistory { UserId = userId, PodcastId = id };
@@ -256,8 +276,8 @@ public class PodcastsController(
         history.ProgressSeconds = request.ProgressSeconds;
         history.IsCompleted = request.IsCompleted;
         history.LastListenedAt = DateTime.UtcNow;
-
         await db.SaveChangesAsync();
+
         return Ok();
     }
 
@@ -271,39 +291,30 @@ public class PodcastsController(
         if (string.IsNullOrEmpty(episodeId) || string.IsNullOrEmpty(podcastLnId))
             return BadRequest(new { message = "listenNotesEpisodeId and listenNotesPodcastId are required." });
 
-        var row = await db.ExternalListeningHistories
-            .FirstOrDefaultAsync(h => h.UserId == userId && h.ListenNotesEpisodeId == episodeId, cancellationToken);
-
+        var row = await db.ExternalListeningHistories.FirstOrDefaultAsync(h => h.UserId == userId && h.ListenNotesEpisodeId == episodeId, cancellationToken);
         if (row == null)
         {
-            row = new ExternalListeningHistory
-            {
-                UserId = userId,
-                ListenNotesEpisodeId = episodeId,
-                ListenNotesPodcastId = podcastLnId,
-            };
+            row = new ExternalListeningHistory { UserId = userId, ListenNotesEpisodeId = episodeId, ListenNotesPodcastId = podcastLnId };
             db.ExternalListeningHistories.Add(row);
         }
         else if (!string.Equals(row.ListenNotesPodcastId, podcastLnId, StringComparison.Ordinal))
+        {
             row.ListenNotesPodcastId = podcastLnId;
+        }
 
         row.ProgressSeconds = Math.Max(0, request.ProgressSeconds);
         row.IsCompleted = request.IsCompleted;
         row.LastListenedAt = DateTime.UtcNow;
 
-        if (!string.IsNullOrWhiteSpace(request.Title))
-            row.Title = request.Title.Trim();
-        if (!string.IsNullOrWhiteSpace(request.AudioUrl))
-            row.AudioUrl = request.AudioUrl.Trim();
+        if (!string.IsNullOrWhiteSpace(request.Title)) row.Title = request.Title.Trim();
+        if (!string.IsNullOrWhiteSpace(request.AudioUrl)) row.AudioUrl = request.AudioUrl.Trim();
         if (request.DurationSeconds is > 0)
         {
             var prev = row.DurationSeconds ?? 0;
             row.DurationSeconds = Math.Max(prev, request.DurationSeconds.Value);
         }
-        if (!string.IsNullOrWhiteSpace(request.CoverImageUrl))
-            row.CoverImageUrl = request.CoverImageUrl.Trim();
-        if (request.Categories is { Count: > 0 })
-            row.CategoryBlob = string.Join(PodcastConstants.CategorySeparator, request.Categories);
+        if (!string.IsNullOrWhiteSpace(request.CoverImageUrl)) row.CoverImageUrl = request.CoverImageUrl.Trim();
+        if (request.Categories is { Count: > 0 }) row.CategoryBlob = string.Join(PodcastConstants.CategorySeparator, request.Categories);
 
         await db.SaveChangesAsync(cancellationToken);
         return Ok();
@@ -313,25 +324,12 @@ public class PodcastsController(
     public async Task<ActionResult<List<RecentlyPlayedDto>>> GetRecentlyPlayed(CancellationToken cancellationToken)
     {
         if (!TryGetUserId(out var userId)) return Unauthorized(new { message = "Invalid token." });
-
         const int takeEach = 40;
-        var internalRows = await db.ListeningHistories
-            .AsNoTracking()
-            .Include(h => h.Podcast)
-            .Where(h => h.UserId == userId)
-            .OrderByDescending(h => h.LastListenedAt)
-            .Take(takeEach)
-            .ToListAsync(cancellationToken);
 
-        var externalRows = await db.ExternalListeningHistories
-            .AsNoTracking()
-            .Where(h => h.UserId == userId)
-            .OrderByDescending(h => h.LastListenedAt)
-            .Take(takeEach)
-            .ToListAsync(cancellationToken);
+        var internalRows = await db.ListeningHistories.AsNoTracking().Include(h => h.Podcast).Where(h => h.UserId == userId).OrderByDescending(h => h.LastListenedAt).Take(takeEach).ToListAsync(cancellationToken);
+        var externalRows = await db.ExternalListeningHistories.AsNoTracking().Where(h => h.UserId == userId).OrderByDescending(h => h.LastListenedAt).Take(takeEach).ToListAsync(cancellationToken);
 
         var merged = new List<(DateTime At, RecentlyPlayedDto Dto)>();
-
         foreach (var h in internalRows)
         {
             var p = h.Podcast!;
@@ -344,22 +342,15 @@ public class PodcastsController(
                 IsCompleted = h.IsCompleted,
                 LastListenedAt = h.LastListenedAt,
                 DurationSeconds = p.DurationSeconds,
-                Categories = string.IsNullOrWhiteSpace(p.CategoryName)
-                    ? new List<string>()
-                    : p.CategoryName.Split(PodcastConstants.CategorySeparator, StringSplitOptions.RemoveEmptyEntries).ToList(),
+                Categories = string.IsNullOrWhiteSpace(p.CategoryName) ? new List<string>() : p.CategoryName.Split(PodcastConstants.CategorySeparator, StringSplitOptions.RemoveEmptyEntries).ToList(),
                 CoverImageUrl = await podcastCoverDisplayUrlResolver.ResolveForPodcastAsync(p, cancellationToken),
-                Status = p.Status,
-                ListenNotesEpisodeId = null,
-                ListenNotesPodcastId = null,
+                Status = p.Status
             }));
         }
 
         foreach (var e in externalRows)
         {
-            var cats = string.IsNullOrWhiteSpace(e.CategoryBlob)
-                ? new List<string>()
-                : e.CategoryBlob.Split(PodcastConstants.CategorySeparator, StringSplitOptions.RemoveEmptyEntries).ToList();
-
+            var cats = string.IsNullOrWhiteSpace(e.CategoryBlob) ? new List<string>() : e.CategoryBlob.Split(PodcastConstants.CategorySeparator, StringSplitOptions.RemoveEmptyEntries).ToList();
             merged.Add((e.LastListenedAt, new RecentlyPlayedDto
             {
                 PodcastId = ListenNotesService.StableListenNotesPodcastGuid(e.ListenNotesPodcastId),
@@ -371,24 +362,16 @@ public class PodcastsController(
                 DurationSeconds = e.DurationSeconds,
                 Categories = cats,
                 CoverImageUrl = e.CoverImageUrl,
-                Status = string.IsNullOrWhiteSpace(e.AudioUrl)
-                    ? PodcastConstants.Status.Failed
-                    : PodcastConstants.Status.Completed,
+                Status = string.IsNullOrWhiteSpace(e.AudioUrl) ? PodcastConstants.Status.Failed : PodcastConstants.Status.Completed,
                 ListenNotesEpisodeId = e.ListenNotesEpisodeId,
-                ListenNotesPodcastId = e.ListenNotesPodcastId,
+                ListenNotesPodcastId = e.ListenNotesPodcastId
             }));
         }
 
-        var history = merged
-            .OrderByDescending(x => x.At)
-            .Take(10)
-            .Select(x => x.Dto)
-            .ToList();
-
+        var history = merged.OrderByDescending(x => x.At).Take(10).Select(x => x.Dto).ToList();
         return Ok(history);
     }
 
-    // GET: api/podcasts/external/trending - Listen Notes üzerindeki popüler podcastleri getirir
     [HttpGet("external/trending")]
     public async Task<ActionResult<List<PodcastSummaryDto>>> GetExternalTrending([FromQuery] string? genreId)
     {
@@ -396,12 +379,10 @@ public class PodcastsController(
         return Ok(podcasts);
     }
 
-    // GET: api/podcasts/external/recommended — Listen Notes global trending (best_podcasts); geriye uyumluluk için rota korunur.
     [HttpGet("external/recommended")]
     public async Task<ActionResult<List<PodcastSummaryDto>>> GetExternalRecommended(CancellationToken cancellationToken)
     {
         if (!TryGetUserId(out _)) return Unauthorized(new { message = "Invalid token." });
-
         var podcasts = await externalPodcastService.GetBestPodcastsAsync(null, cancellationToken: cancellationToken);
         return Ok(podcasts);
     }
@@ -420,9 +401,7 @@ public class PodcastsController(
             AudioUrl = p.AudioUrl,
             DurationSeconds = p.DurationSeconds,
             Status = p.Status,
-            Categories = string.IsNullOrWhiteSpace(p.CategoryName)
-                ? new List<string>()
-                : p.CategoryName.Split(PodcastConstants.CategorySeparator, StringSplitOptions.RemoveEmptyEntries).ToList(),
+            Categories = string.IsNullOrWhiteSpace(p.CategoryName) ? new List<string>() : p.CategoryName.Split(PodcastConstants.CategorySeparator, StringSplitOptions.RemoveEmptyEntries).ToList(),
             CoverImageUrl = await podcastCoverDisplayUrlResolver.ResolveForPodcastAsync(p, cancellationToken),
             CreatedAt = p.CreatedAt,
             LearningMode = p.LearningMode,
@@ -441,25 +420,12 @@ public class PodcastsController(
             Tone = p.Tone,
             SpeakerCount = p.SpeakerCount,
             Status = p.Status,
-            Categories = string.IsNullOrWhiteSpace(p.CategoryName)
-                ? new List<string>()
-                : p.CategoryName.Split(PodcastConstants.CategorySeparator).ToList(),
+            Categories = string.IsNullOrWhiteSpace(p.CategoryName) ? new List<string>() : p.CategoryName.Split(PodcastConstants.CategorySeparator).ToList(),
             CoverImageUrl = await podcastCoverDisplayUrlResolver.ResolveForPodcastAsync(p, cancellationToken),
             CefrLevel = p.CefrLevel,
             LearningMode = p.LearningMode,
             CreatedAt = p.CreatedAt,
-            Sources = p.Sources.Select(s => new PodcastSourceDto
-            {
-                SourceName = s.SourceName,
-                NewsTitle = s.NewsTitle,
-                NewsUrl = s.NewsUrl,
-                PublishedAt = s.PublishedAt,
-            }).ToList(),
-            Transcript = string.IsNullOrWhiteSpace(p.TranscriptJson)
-                ? new()
-                : JsonSerializer.Deserialize<List<TranscriptSegmentDto>>(p.TranscriptJson, TranscriptJsonOptions) ?? new(),
-            ListenNotesPodcastId = null,
-            ListenNotesEpisodeId = null,
-            Publisher = null,
+            Sources = p.Sources.Select(s => new PodcastSourceDto { SourceName = s.SourceName, NewsTitle = s.NewsTitle, NewsUrl = s.NewsUrl, PublishedAt = s.PublishedAt }).ToList(),
+            Transcript = string.IsNullOrWhiteSpace(p.TranscriptJson) ? new() : JsonSerializer.Deserialize<List<TranscriptSegmentDto>>(p.TranscriptJson, TranscriptJsonOptions) ?? new()
         };
 }
