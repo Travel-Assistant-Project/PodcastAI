@@ -142,9 +142,16 @@ export async function getLatestPodcast(): Promise<PodcastSummary | null> {
   return response.data;
 }
 
-/** Home trending row — Listen Notes `best_podcasts` (up to 10 items via `/recommended`). */
+/** Home / Discover trending — Listen Notes `best_podcasts` (up to 10 via `/recommended`). */
 export async function getTrendingPodcasts(): Promise<PodcastSummary[]> {
   const { data } = await api.get<PodcastSummary[]>('/api/podcasts/recommended');
+  return data;
+}
+
+/** Category Discover — optional Listen Notes genre filter (`genre_id` query). */
+export async function getExternalTrending(genreId?: string | null): Promise<PodcastSummary[]> {
+  const q = genreId?.trim() ? `?genreId=${encodeURIComponent(genreId.trim())}` : '';
+  const { data } = await api.get<PodcastSummary[]>(`/api/podcasts/external/trending${q}`);
   return data;
 }
 

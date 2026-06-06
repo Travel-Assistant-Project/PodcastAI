@@ -20,11 +20,12 @@ import {
   type RecentlyPlayed,
 } from '@/src/api/podcasts.api';
 import { Colors } from '@/src/styles/colors';
-import FavoriteButton from '@/src/components/FavoriteButton';
+import PodcastCardFavorite from '@/src/components/PodcastCardFavorite';
 import RecentlyPlayedList from '@/src/components/RecentlyPlayedList';
 import { getUser } from '@/src/store/authStore';
 import { getProfile } from '@/src/api/user.api';
 import { categoryAccentColor as categoryColor } from '@/src/utils/categoryAccent';
+import { categoryTag } from '@/src/utils/podcastNavigation';
 
 const POLL_INTERVAL_MS = 5000;
 
@@ -309,7 +310,7 @@ export default function HomeScreen() {
     load();
   }, []);
 
-  // --- Recently played + header avatar (Profile'dan dönünce foto güncellenir) ---
+  // --- Recently played + trending + header avatar (sekme odağında yenilenir) ---
   useFocusEffect(
     useCallback(() => {
       let cancelled = false;
@@ -349,7 +350,6 @@ export default function HomeScreen() {
         <View style={styles.header}>
           <Text style={styles.brand}>PodcastAI</Text>
           <View style={styles.headerActions}>
-            <Text style={styles.iconText}>⌕</Text>
             <TouchableOpacity
               activeOpacity={0.85}
               onPress={() => router.push('/(tabs)/profile')}
@@ -381,7 +381,7 @@ export default function HomeScreen() {
             <TouchableOpacity
               style={styles.viewAllBtn}
               activeOpacity={0.75}
-              onPress={() => router.push('/past-podcasts')}
+              onPress={() => router.push('/explore')}
             >
               <Text style={styles.viewAllBtnText}>View All</Text>
             </TouchableOpacity>
@@ -410,8 +410,7 @@ export default function HomeScreen() {
             {trending.map((item) => {
               const coverUri = item.coverImageUrl?.trim() || null;
               const isExternal = item.status?.toLowerCase() === 'external';
-              const categoryLabel =
-                (item.publisher?.trim() || item.categories[0] || '').trim();
+              const categoryLabel = categoryTag(item);
               const openRecommended = () => {
                 if (isExternal) {
                   const ln = item.listenNotesPodcastId?.trim();
@@ -436,7 +435,7 @@ export default function HomeScreen() {
                       fallbackColor={categoryColor(item.categories)}
                     />
                     <View style={styles.recommendedFavBtn}>
-                      {!isExternal ? <FavoriteButton size={15} /> : null}
+                      <PodcastCardFavorite item={item} size={15} />
                     </View>
                   </View>
                   {categoryLabel.length > 0 && (

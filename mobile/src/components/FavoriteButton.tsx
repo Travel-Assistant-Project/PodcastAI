@@ -3,37 +3,57 @@ import { ActivityIndicator, StyleSheet, TouchableOpacity } from 'react-native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import axios from 'axios';
 
-import { addPodcastFavorite, removePodcastFavorite } from '@/src/api/favorites.api';
+import {
+  addListenNotesFavorite,
+  addPodcastFavorite,
+  removeListenNotesFavorite,
+  removePodcastFavorite,
+  type FavoriteSnapshot,
+} from '@/src/api/favorites.api';
+import { useFavorites } from '@/src/context/FavoritesContext';
 import { useFavorite } from '@/src/hooks/useFavorite';
 
 type Props = Readonly<{
-  /** Oturum favorilerine yazmak için dahili podcast kimliği (Guid string). */
   podcastId?: string | null;
+  listenNotesPodcastId?: string | null;
+  snapshot?: FavoriteSnapshot;
   initialFavorited?: boolean;
-  onFavoriteChange?: (podcastId: string, favorited: boolean) => void;
+  onFavoriteChange?: (key: string, favorited: boolean) => void;
   size?: number;
   dark?: boolean;
 }>;
 
 export default function FavoriteButton({
   podcastId,
+  listenNotesPodcastId,
+  snapshot,
   initialFavorited = false,
   onFavoriteChange,
   size = 18,
   dark = false,
 }: Props) {
-  const persist = Boolean(podcastId?.trim());
+  const favorites = useFavorites();
+  const lnId = listenNotesPodcastId?.trim() ?? '';
+  const internalId = podcastId?.trim() ?? '';
+  const persist = lnId.length > 0 || internalId.length > 0;
   const local = useFavorite(initialFavorited);
+
+  const contextFavorited = favorites.isFavorited({
+    podcastId: internalId || undefined,
+    listenNotesPodcastId: lnId || undefined,
+  });
 
   const [serverFavorited, setServerFavorited] = useState(initialFavorited);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (persist) setServerFavorited(initialFavorited);
-  }, [persist, initialFavorited, podcastId]);
+    if (!persist) return;
+    setServerFavorited(contextFavorited || initialFavorited);
+  }, [persist, contextFavorited, initialFavorited, internalId, lnId]);
 
   const isFavorited = persist ? serverFavorited : local.isFavorited;
   const iconColor = isFavorited ? '#E53935' : dark ? '#fff' : '#C2C7D0';
+  const changeKey = lnId || internalId;
 
   const toggle = useCallback(async () => {
     if (!persist) {
@@ -41,41 +61,65 @@ export default function FavoriteButton({
       return;
     }
 
-    const id = podcastId!.trim();
     if (busy) return;
     setBusy(true);
+
+    const opts = {
+      podcastId: internalId || undefined,
+      listenNotesPodcastId: lnId || undefined,
+    };
 
     try {
       if (serverFavorited) {
         try {
-          await removePodcastFavorite(id);
+          if (lnId) await removeListenNotesFavorite(lnId);
+          else await removePodcastFavorite(internalId);
         } catch (e: unknown) {
           const status = axios.isAxiosError(e) ? e.response?.status : undefined;
           if (status !== 404) throw e;
         }
         setServerFavorited(false);
-        onFavoriteChange?.(id, false);
+        favorites.markUnfavorited(opts);
+        onFavoriteChange?.(changeKey, false);
       } else {
         try {
-          await addPodcastFavorite(id);
+          if (lnId) {
+            if (!snapshot) throw new Error('Favorite snapshot required for Listen Notes podcasts.');
+            await addListenNotesFavorite(lnId, snapshot);
+          } else {
+            await addPodcastFavorite(internalId);
+          }
         } catch (e: unknown) {
           const status = axios.isAxiosError(e) ? e.response?.status : undefined;
           if (status === 400) {
             setServerFavorited(true);
-            onFavoriteChange?.(id, true);
+            favorites.markFavorited(opts);
+            onFavoriteChange?.(changeKey, true);
             return;
           }
           throw e;
         }
         setServerFavorited(true);
-        onFavoriteChange?.(id, true);
+        favorites.markFavorited(opts);
+        onFavoriteChange?.(changeKey, true);
       }
     } catch {
       /* istek başarısız; durumu olduğu gibi bırak */
     } finally {
       setBusy(false);
     }
-  }, [persist, podcastId, serverFavorited, busy, local, onFavoriteChange]);
+  }, [
+    persist,
+    busy,
+    serverFavorited,
+    lnId,
+    internalId,
+    snapshot,
+    local,
+    favorites,
+    onFavoriteChange,
+    changeKey,
+  ]);
 
   return (
     <TouchableOpacity

@@ -4,6 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { FavoritesProvider } from '@/src/context/FavoritesContext';
 import { PlaybackProvider } from '@/src/context/PlaybackContext';
 import MiniPlayerBar from '@/src/components/MiniPlayerBar';
 
@@ -16,6 +17,7 @@ export default function RootLayout() {
 
   return (
     <PlaybackProvider>
+      <FavoritesProvider>
       <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
         <Stack>
         <Stack.Screen name="index" options={{ headerShown: false }} />
@@ -33,6 +35,7 @@ export default function RootLayout() {
       <MiniPlayerBar />
       <StatusBar style="auto" />
     </ThemeProvider>
+      </FavoritesProvider>
     </PlaybackProvider>
   );
 }

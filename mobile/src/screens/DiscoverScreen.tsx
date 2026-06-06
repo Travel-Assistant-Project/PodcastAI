@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -8,73 +8,76 @@ import {
   TextInput,
   Image,
   Dimensions,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import FavoriteButton from '@/src/components/FavoriteButton';
+import PodcastCardFavorite from '@/src/components/PodcastCardFavorite';
+import { getTrendingPodcasts, type PodcastSummary } from '@/src/api/podcasts.api';
+import { CATEGORY_OPTIONS } from '@/src/constants/categories';
+import {
+  categoryTag,
+  formatDurationMinutes,
+  openPodcastSummary,
+} from '@/src/utils/podcastNavigation';
 
 const { width } = Dimensions.get('window');
 
-const TRENDING = [
-  {
-    id: 't1',
-    title: 'Mapping Brain-to-Text Pipelines',
-    author: 'Dr. Elena Vos',
-    duration: '38 min',
-    tag: 'NEUROSCIENCE',
-    imageUrl: 'https://images.unsplash.com/photo-1559757175-5700dde675bc?q=80&w=800&auto=format&fit=crop',
-    featured: true,
-  },
-  {
-    id: 't2',
-    title: 'CRISPR and the Ethics of Tomorrow',
-    duration: '51 min',
-    tag: 'BIOTECH',
-    imageUrl: 'https://images.unsplash.com/photo-1628595351029-c2bf17511435?q=80&w=800&auto=format&fit=crop',
-    featured: false,
-  },
-  {
-    id: 't3',
-    title: 'Post-Scarcity Economics',
-    duration: '44 min',
-    tag: 'ECONOMICS',
-    imageUrl: 'https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?q=80&w=800&auto=format&fit=crop',
-    featured: false,
-  },
-];
+const CATEGORY_ICONS: Record<string, string> = {
+  technology: 'computer',
+  science: 'science',
+  economy: 'trending-up',
+  health: 'favorite-border',
+  entertainment: 'palette',
+  world: 'public',
+  sports: 'sports-soccer',
+  finance: 'account-balance',
+  music: 'music-note',
+  ai: 'auto-awesome',
+};
 
-const CATEGORIES = [
-  { id: 'c1', label: 'Technology', icon: 'computer' },
-  { id: 'c2', label: 'Science', icon: 'science' },
-  { id: 'c3', label: 'Business', icon: 'trending-up' },
-  { id: 'c4', label: 'Health', icon: 'favorite-border' },
-  { id: 'c5', label: 'Arts', icon: 'palette' },
-  { id: 'c6', label: 'Philosophy', icon: 'psychology' },
-  { id: 'c7', label: 'History', icon: 'auto-stories' },
-  { id: 'c8', label: 'Environment', icon: 'eco' },
-];
-
-const ARCHIVE_PICKS = [
-  {
-    id: 'a1',
-    title: 'The Dark Matter Paradox',
-    subtitle: 'Exploring new theories',
-    tag: 'PHYSICS DEEP DIVE',
-    imageUrl: 'https://images.unsplash.com/photo-1446776811953-b23d57bd21aa?q=80&w=400&auto=format&fit=crop',
-  },
-  {
-    id: 'a2',
-    title: 'Sustainable Arcologies',
-    subtitle: 'Designing vertical cities',
-    tag: 'FUTURE LIVING',
-    imageUrl: 'https://images.unsplash.com/photo-1486325212027-8081e485255e?q=80&w=400&auto=format&fit=crop',
-  },
-];
+const BROWSE_CATEGORIES = CATEGORY_OPTIONS.map((c) => ({
+  id: c.apiSlug,
+  label: c.label,
+  icon: CATEGORY_ICONS[c.apiSlug] ?? 'category',
+}));
 
 export default function DiscoverScreen() {
   const router = useRouter();
   const [search, setSearch] = useState('');
+  const [trending, setTrending] = useState<PodcastSummary[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const loadTrending = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await getTrendingPodcasts();
+      setTrending(data);
+    } catch {
+      setTrending([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadTrending();
+  }, [loadTrending]);
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return trending;
+    return trending.filter((p) => {
+      const title = (p.title ?? '').toLowerCase();
+      const pub = (p.publisher ?? '').toLowerCase();
+      const cats = p.categories.join(' ').toLowerCase();
+      return title.includes(q) || pub.includes(q) || cats.includes(q);
+    });
+  }, [search, trending]);
+
+  const trendingEpisodes = filtered.slice(0, 7);
+  const archivePicks = filtered.slice(7, 9);
 
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
@@ -86,9 +89,9 @@ export default function DiscoverScreen() {
           <View style={styles.headerDivider} />
           <Text style={styles.headerPage}>Discover</Text>
         </View>
-        <TouchableOpacity style={styles.searchIconBtn}>
+        {/* <TouchableOpacity style={styles.searchIconBtn}>
           <MaterialIcons name="search" size={22} color="#5A5F6A" />
-        </TouchableOpacity>
+        </TouchableOpacity> */}
       </View>
 
       <ScrollView
@@ -114,53 +117,50 @@ export default function DiscoverScreen() {
               <Text style={styles.sectionTitle}>Trending Episodes</Text>
               <Text style={styles.sectionSub}>Curated based on your research interests</Text>
             </View>
-            <TouchableOpacity>
-              <Text style={styles.viewAll}>View{'\n'}All</Text>
-            </TouchableOpacity>
           </View>
 
-          {/* Featured card */}
-          <TouchableOpacity style={styles.featuredCard} activeOpacity={0.88} onPress={() => router.push('/podcast')}>
-            <Image source={{ uri: TRENDING[0].imageUrl }} style={styles.featuredImage} />
-            <View style={styles.featuredOverlay} />
-            <View style={styles.favBtnTopRight}>
-              <FavoriteButton dark />
+          {loading && (
+            <View style={styles.loaderWrap}>
+              <ActivityIndicator color="#0714B8" />
             </View>
-            <View style={styles.featuredContent}>
-              <Text style={styles.featuredTag}>{TRENDING[0].tag}</Text>
-              <Text style={styles.featuredTitle}>{TRENDING[0].title}</Text>
-              <View style={styles.featuredFooter}>
-                <View style={styles.authorRow}>
-                  <View style={styles.authorAvatar}>
-                    <Text style={styles.authorInitial}>D</Text>
-                  </View>
-                  <Text style={styles.authorName}>{TRENDING[0].author}</Text>
-                </View>
-                <TouchableOpacity style={styles.playBtn}>
-                  <MaterialIcons name="play-arrow" size={20} color="#fff" />
-                </TouchableOpacity>
-              </View>
-            </View>
-          </TouchableOpacity>
+          )}
+          {!loading && filtered.length === 0 && (
+            <Text style={styles.emptyHint}>No podcasts match your search right now.</Text>
+          )}
 
-          {/* Regular trending cards */}
-          {TRENDING.slice(1).map((item) => (
-            <TouchableOpacity key={item.id} style={styles.trendingRow} activeOpacity={0.85} onPress={() => router.push('/podcast')}>
-              <Image source={{ uri: item.imageUrl }} style={styles.trendingThumb} />
-              <View style={styles.trendingOverlay} />
-              <View style={styles.trendingPlayWrap}>
-                <MaterialIcons name="play-arrow" size={22} color="#fff" />
-              </View>
-              <View style={styles.favBtnTopRight}>
-                <FavoriteButton dark size={16} />
-              </View>
-              <View style={styles.trendingInfo}>
-                <Text style={styles.trendingTag}>{item.tag}</Text>
-                <Text style={styles.trendingTitle}>{item.title}</Text>
-                <Text style={styles.trendingDuration}>{item.duration}</Text>
-              </View>
-            </TouchableOpacity>
-          ))}
+          {!loading &&
+            trendingEpisodes.map((item) => {
+              return (
+                <TouchableOpacity
+                  key={item.id}
+                  style={styles.trendingCard}
+                  activeOpacity={0.88}
+                  onPress={() => openPodcastSummary(router, item)}>
+                  <Image
+                    source={{
+                      uri:
+                        item.coverImageUrl?.trim() ||
+                        'https://images.unsplash.com/photo-1478737270239-2f02b77fc618?q=80&w=800&auto=format&fit=crop',
+                    }}
+                    style={styles.trendingCardImage}
+                  />
+                  <View style={styles.trendingCardOverlay} />
+                  <View style={styles.favBtnTopRight}>
+                    <PodcastCardFavorite item={item} dark />
+                  </View>
+                  <View style={styles.trendingCardContent}>
+                    <Text style={styles.trendingCardTag}>{categoryTag(item)}</Text>
+                    <Text style={styles.trendingCardTitle}>{item.title ?? 'Untitled'}</Text>
+                    <Text style={styles.trendingCardDuration}>
+                      {formatDurationMinutes(item.durationSeconds)}
+                    </Text>
+                  </View>
+                  <TouchableOpacity style={styles.trendingCardPlayBtn}>
+                    <MaterialIcons name="play-arrow" size={20} color="#fff" />
+                  </TouchableOpacity>
+                </TouchableOpacity>
+              );
+            })}
         </View>
 
         {/* Browse by Category */}
@@ -169,7 +169,7 @@ export default function DiscoverScreen() {
           <Text style={styles.sectionSub}>Drop dives into specialized domains</Text>
 
           <View style={styles.categoryGrid}>
-            {CATEGORIES.map((cat) => (
+            {BROWSE_CATEGORIES.map((cat) => (
               <TouchableOpacity
                 key={cat.id}
                 style={styles.categoryCard}
@@ -189,17 +189,33 @@ export default function DiscoverScreen() {
           <Text style={styles.sectionTitle}>PodcastAI Picks</Text>
           <Text style={styles.sectionSub}>Expertly documented research streams</Text>
 
-          {ARCHIVE_PICKS.map((item) => (
-            <TouchableOpacity key={item.id} style={styles.archiveRow} activeOpacity={0.85} onPress={() => router.push('/podcast')}>
-              <Image source={{ uri: item.imageUrl }} style={styles.archiveThumb} />
-              <View style={styles.archiveInfo}>
-                <Text style={styles.archiveTag}>{item.tag}</Text>
-                <Text style={styles.archiveTitle}>{item.title}</Text>
-                <Text style={styles.archiveSub}>{item.subtitle}</Text>
-              </View>
-              <FavoriteButton size={18} />
-            </TouchableOpacity>
-          ))}
+          {!loading &&
+            archivePicks.map((item) => {
+              return (
+                <TouchableOpacity
+                  key={item.id}
+                  style={styles.archiveRow}
+                  activeOpacity={0.85}
+                  onPress={() => openPodcastSummary(router, item)}>
+                  <Image
+                    source={{
+                      uri:
+                        item.coverImageUrl?.trim() ||
+                        'https://images.unsplash.com/photo-1478737270239-2f02b77fc618?q=80&w=400&auto=format&fit=crop',
+                    }}
+                    style={styles.archiveThumb}
+                  />
+                  <View style={styles.archiveInfo}>
+                    <Text style={styles.archiveTag}>{categoryTag(item)}</Text>
+                    <Text style={styles.archiveTitle}>{item.title ?? 'Untitled'}</Text>
+                    <Text style={styles.archiveSub} numberOfLines={1}>
+                      {item.publisher?.trim() || formatDurationMinutes(item.durationSeconds)}
+                    </Text>
+                  </View>
+                  <PodcastCardFavorite item={item} size={18} />
+                </TouchableOpacity>
+              );
+            })}
         </View>
 
       </ScrollView>
@@ -309,6 +325,17 @@ const styles = StyleSheet.create({
     lineHeight: 17,
   },
 
+  loaderWrap: {
+    paddingVertical: 32,
+    alignItems: 'center',
+  },
+
+  emptyHint: {
+    fontSize: 13,
+    color: '#8A8F9A',
+    marginBottom: 12,
+  },
+
   /* Featured card */
   favBtnTopRight: {
     position: 'absolute',
@@ -317,31 +344,32 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
 
-  featuredCard: {
+  /* Trending card - vertical layout */
+  trendingCard: {
     borderRadius: 18,
     overflow: 'hidden',
-    height: 200,
-    marginBottom: 14,
+    height: 140,
+    marginBottom: 12,
   },
 
-  featuredImage: {
+  trendingCardImage: {
     width: '100%',
     height: '100%',
     position: 'absolute',
   },
 
-  featuredOverlay: {
+  trendingCardOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(10, 8, 35, 0.62)',
   },
 
-  featuredContent: {
+  trendingCardContent: {
     flex: 1,
     padding: 18,
     justifyContent: 'flex-end',
   },
 
-  featuredTag: {
+  trendingCardTag: {
     fontSize: 10,
     fontWeight: '800',
     color: '#8B8FFF',
@@ -349,114 +377,29 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
 
-  featuredTitle: {
-    fontSize: 18,
+  trendingCardTitle: {
+    fontSize: 16,
     fontWeight: '700',
     color: '#FFFFFF',
-    lineHeight: 24,
-    marginBottom: 14,
+    lineHeight: 22,
+    marginBottom: 6,
   },
 
-  featuredFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-
-  authorRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-
-  authorAvatar: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#8B8FFF',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  authorInitial: {
-    color: '#fff',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-
-  authorName: {
-    fontSize: 13,
+  trendingCardDuration: {
+    fontSize: 12,
     color: '#C8CAFF',
-    fontWeight: '500',
   },
 
-  playBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: '#8B8FFF',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  /* Regular trending rows */
-  trendingRow: {
-    borderRadius: 14,
-    overflow: 'hidden',
-    height: 120,
-    marginBottom: 12,
-  },
-
-  trendingThumb: {
-    width: '100%',
-    height: '100%',
+  trendingCardPlayBtn: {
     position: 'absolute',
-  },
-
-  trendingOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(10, 8, 35, 0.65)',
-  },
-
-  trendingPlayWrap: {
-    position: 'absolute',
-    top: '50%',
-    left: '50%',
-    marginTop: -20,
-    marginLeft: -20,
+    bottom: 14,
+    right: 14,
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: 'rgba(139,143,255,0.85)',
+    backgroundColor: '#8B8FFF',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-
-  trendingInfo: {
-    position: 'absolute',
-    bottom: 14,
-    left: 16,
-    right: 16,
-  },
-
-  trendingTag: {
-    fontSize: 9,
-    fontWeight: '800',
-    color: '#8B8FFF',
-    letterSpacing: 1.4,
-    marginBottom: 4,
-  },
-
-  trendingTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    marginBottom: 3,
-  },
-
-  trendingDuration: {
-    fontSize: 12,
-    color: '#A0A4C0',
   },
 
   /* Categories */

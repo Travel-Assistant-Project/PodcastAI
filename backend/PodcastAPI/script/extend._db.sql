@@ -134,3 +134,19 @@ CREATE INDEX IF NOT EXISTS idx_external_listening_user ON external_listening_his
 
 -- 17.05.2026: Başarısız üretim zamanı — GET /podcasts/latest ana sayfa hero için (5 dk sonra önceki tamamlanan bölüm).
 ALTER TABLE podcasts ADD COLUMN IF NOT EXISTS failedat TIMESTAMP WITH TIME ZONE;
+
+-- 06.06.2026: Listen Notes şov favorileri (podcasts tablosunda satır yok).
+CREATE TABLE IF NOT EXISTS external_favorites (
+    userid                   UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    listen_notes_podcast_id  VARCHAR(64) NOT NULL,
+    title                    TEXT,
+    audiourl                 TEXT,
+    durationseconds          INT,
+    coverimageurl            TEXT,
+    publisher                TEXT,
+    categoryblob             VARCHAR(500),
+    createdat                TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (userid, listen_notes_podcast_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_external_favorites_user ON external_favorites(userid, createdat DESC);

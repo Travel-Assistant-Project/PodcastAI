@@ -15,10 +15,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { register } from '@/src/api/auth.api';
 import { getApiErrorMessage } from '@/src/api/errorMessage';
 import { setAuthToken } from '@/src/api/client';
+import { useFavorites } from '@/src/context/FavoritesContext';
 import { setUser } from '@/src/store/authStore';
 
 const RegisterScreen = () => {
   const router = useRouter();
+  const { refresh: refreshFavorites } = useFavorites();
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [fullName, setFullName] = useState('');
@@ -51,6 +53,7 @@ const RegisterScreen = () => {
 
       setAuthToken(response.token);
       setUser(response);
+      await refreshFavorites();
       router.replace('/(tabs)');
     } catch (error: unknown) {
       const message = getApiErrorMessage(
