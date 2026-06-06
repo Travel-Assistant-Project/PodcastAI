@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -7,11 +7,19 @@ import {
   TouchableOpacity,
   Image,
   Dimensions,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import FavoriteButton from '@/src/components/FavoriteButton';
+import PodcastCardFavorite from '@/src/components/PodcastCardFavorite';
+import { getExternalTrending, type PodcastSummary } from '@/src/api/podcasts.api';
+import { getCategoryOption } from '@/src/constants/categories';
+import {
+  categoryTag,
+  formatDurationMinutes,
+  openPodcastSummary,
+} from '@/src/utils/podcastNavigation';
 
 const { width } = Dimensions.get('window');
 
@@ -40,6 +48,42 @@ const CATEGORY_META: Record<string, { color: string; icon: string; description: 
     description:
       'The science of longevity, mental resilience and the future of personalized medicine.',
   },
+  'World News': {
+    color: '#1A5AB8',
+    icon: 'public',
+    description:
+      'Global headlines, geopolitics and the stories shaping our interconnected world.',
+  },
+  Sports: {
+    color: '#0A7A3A',
+    icon: 'sports-soccer',
+    description:
+      'Athletics, competition and the culture of sport from grassroots to the world stage.',
+  },
+  Entertainment: {
+    color: '#7A0DB8',
+    icon: 'palette',
+    description:
+      'Creativity, culture and the intersection of human expression with emerging technologies.',
+  },
+  Finance: {
+    color: '#8A5A0A',
+    icon: 'account-balance',
+    description:
+      'Markets, investing and the economic forces that move money and shape decisions.',
+  },
+  Music: {
+    color: '#B80A7A',
+    icon: 'music-note',
+    description:
+      'Artists, albums and the soundscapes that define generations and genres.',
+  },
+  AI: {
+    color: '#4A0DB8',
+    icon: 'auto-awesome',
+    description:
+      'Machine learning, automation and the frontier of artificial intelligence research.',
+  },
   Arts: {
     color: '#7A0DB8',
     icon: 'palette',
@@ -66,104 +110,35 @@ const CATEGORY_META: Record<string, { color: string; icon: string; description: 
   },
 };
 
-const TRENDING = [
-  {
-    id: 'tr1',
-    title: 'The Silicon Sentience: Exploring Non-Turing Intelligence',
-    duration: '41 min',
-    tag: 'AI · COGNITION',
-    imageUrl:
-      'https://images.unsplash.com/photo-1620712943543-bcc4688e7485?q=80&w=600&auto=format&fit=crop',
-  },
-  {
-    id: 'tr2',
-    title: 'Zero Trust Architectures in the Post-Key Age',
-    duration: '33 min',
-    tag: 'SECURITY',
-    imageUrl:
-      'https://images.unsplash.com/photo-1563986768609-322da13575f3?q=80&w=600&auto=format&fit=crop',
-  },
-  {
-    id: 'tr3',
-    title: 'The Decentralised Ledger: More Than Use Cases',
-    duration: '28 min',
-    tag: 'BLOCKCHAIN',
-    imageUrl:
-      'https://images.unsplash.com/photo-1639762681485-074b7f938ba0?q=80&w=600&auto=format&fit=crop',
-  },
-];
-
-const LATEST_EPISODES = [
-  {
-    id: 'ep1',
-    title: 'Scaling the Compute Infrastructure for the Next Billion Users',
-    duration: '56 min',
-    tag: 'INFRASTRUCTURE · CLOUD',
-    imageUrl:
-      'https://images.unsplash.com/photo-1558494949-ef010cbdcc31?q=80&w=800&auto=format&fit=crop',
-  },
-  {
-    id: 'ep2',
-    title: 'The Bio-Link: Interface Between Brain and Machine',
-    duration: '49 min',
-    tag: 'NEUROTECHNOLOGY',
-    imageUrl:
-      'https://images.unsplash.com/photo-1559757175-5700dde675bc?q=80&w=800&auto=format&fit=crop',
-  },
-  {
-    id: 'ep3',
-    title: 'Global Connectivity: Bridging the Digital Divide via LEO',
-    duration: '37 min',
-    tag: 'SATELLITES · NETWORK',
-    imageUrl:
-      'https://images.unsplash.com/photo-1446776811953-b23d57bd21aa?q=80&w=800&auto=format&fit=crop',
-  },
-];
-
-const CURATORS = [
-  {
-    id: 'cu1',
-    name: 'Nova T.',
-    specialty: 'AI SYSTEMS',
-    followers: '12.4K',
-    imageUrl: 'https://i.pravatar.cc/100?img=47',
-    following: false,
-  },
-  {
-    id: 'cu2',
-    name: 'Dr. Elena V.',
-    specialty: 'NEUROSCIENCE',
-    followers: '9.1K',
-    imageUrl: 'https://i.pravatar.cc/100?img=25',
-    following: true,
-  },
-  {
-    id: 'cu3',
-    name: 'Sam Ford',
-    specialty: 'BLOCKCHAIN',
-    followers: '7.8K',
-    imageUrl: 'https://i.pravatar.cc/100?img=33',
-    following: false,
-  },
-  {
-    id: 'cu4',
-    name: 'Marcus Thoma',
-    specialty: 'FUTURE TECH',
-    followers: '15.2K',
-    imageUrl: 'https://i.pravatar.cc/100?img=52',
-    following: false,
-  },
-];
+const FALLBACK_COVER =
+  'https://images.unsplash.com/photo-1478737270239-2f02b77fc618?q=80&w=800&auto=format&fit=crop';
 
 export default function CategoryScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const category = id ?? 'Technology';
+  const categoryOption = getCategoryOption(category);
   const meta = CATEGORY_META[category] ?? CATEGORY_META.Technology;
+  const genreId = categoryOption?.listenNotesGenreId ?? null;
 
-  const [followed, setFollowed] = useState<Record<string, boolean>>(
-    Object.fromEntries(CURATORS.map((c) => [c.id, c.following]))
-  );
+  const [categoryItems, setCategoryItems] = useState<PodcastSummary[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await getExternalTrending(genreId);
+      setCategoryItems(data);
+    } catch {
+      setCategoryItems([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [genreId]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
 
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
@@ -195,8 +170,8 @@ export default function CategoryScreen() {
           <Text style={styles.heroDesc}>{meta.description}</Text>
           <View style={styles.heroStats}>
             <View style={styles.heroStat}>
-              <Text style={styles.heroStatValue}>2.4K</Text>
-              <Text style={styles.heroStatLabel}>Episodes</Text>
+              <Text style={styles.heroStatValue}>{loading ? '—' : String(categoryItems.length)}</Text>
+              <Text style={styles.heroStatLabel}>Shows</Text>
             </View>
             <View style={styles.heroStatDivider} />
             <View style={styles.heroStat}>
@@ -223,23 +198,41 @@ export default function CategoryScreen() {
             </TouchableOpacity>
           </View>
 
+          {loading && (
+            <View style={styles.loaderWrap}>
+              <ActivityIndicator color={meta.color} />
+            </View>
+          )}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.trendingScroll}>
-            {TRENDING.map((item) => (
-              <TouchableOpacity key={item.id} style={styles.trendingCard} activeOpacity={0.85}>
-                <Image source={{ uri: item.imageUrl }} style={styles.trendingCardImage} />
-                <View style={styles.trendingCardOverlay} />
-                <TouchableOpacity style={[styles.trendingPlayBtn, { backgroundColor: meta.color }]}>
-                  <MaterialIcons name="play-arrow" size={18} color="#fff" />
+            {!loading &&
+              categoryItems.slice(0, 6).map((item) => (
+                <TouchableOpacity
+                  key={item.id}
+                  style={styles.trendingCard}
+                  activeOpacity={0.85}
+                  onPress={() => openPodcastSummary(router, item)}>
+                  <Image
+                    source={{ uri: item.coverImageUrl?.trim() || FALLBACK_COVER }}
+                    style={styles.trendingCardImage}
+                  />
+                  <View style={styles.trendingCardOverlay} />
+                  <View style={styles.trendingFavBtn}>
+                    <PodcastCardFavorite item={item} browseCategoryLabel={category} dark size={14} />
+                  </View>
+                  <TouchableOpacity style={[styles.trendingPlayBtn, { backgroundColor: meta.color }]}>
+                    <MaterialIcons name="play-arrow" size={18} color="#fff" />
+                  </TouchableOpacity>
+                  <View style={styles.trendingCardContent}>
+                    <Text style={styles.trendingCardTag}>{categoryTag(item)}</Text>
+                    <Text style={styles.trendingCardTitle} numberOfLines={2}>
+                      {item.title ?? 'Untitled'}
+                    </Text>
+                    <Text style={styles.trendingCardDuration}>
+                      {formatDurationMinutes(item.durationSeconds)}
+                    </Text>
+                  </View>
                 </TouchableOpacity>
-                <View style={styles.trendingCardContent}>
-                  <Text style={styles.trendingCardTag}>{item.tag}</Text>
-                  <Text style={styles.trendingCardTitle} numberOfLines={2}>
-                    {item.title}
-                  </Text>
-                  <Text style={styles.trendingCardDuration}>{item.duration}</Text>
-                </View>
-              </TouchableOpacity>
-            ))}
+              ))}
           </ScrollView>
         </View>
 
@@ -252,58 +245,40 @@ export default function CategoryScreen() {
             </TouchableOpacity>
           </View>
 
-          {LATEST_EPISODES.map((ep) => (
-            <TouchableOpacity key={ep.id} style={styles.episodeCard} activeOpacity={0.88}>
-              <Image source={{ uri: ep.imageUrl }} style={styles.episodeImage} />
-              <View style={styles.episodeOverlay} />
-              <View style={styles.episodeFavBtn}>
-                <FavoriteButton dark size={16} />
-              </View>
-              <View style={styles.episodeContent}>
-                <Text style={styles.episodeTag}>{ep.tag}</Text>
-                <Text style={styles.episodeTitle}>{ep.title}</Text>
-                <View style={styles.episodeFooter}>
-                  <Text style={styles.episodeDuration}>{ep.duration}</Text>
-                  <TouchableOpacity style={[styles.episodePlayBtn, { backgroundColor: meta.color }]}>
-                    <MaterialIcons name="play-arrow" size={18} color="#fff" />
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        {/* Top Curators */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Top AI Curators</Text>
-          <Text style={styles.sectionSub}>Experts in this area you can follow</Text>
-
-          {CURATORS.map((curator) => (
-            <View key={curator.id} style={styles.curatorRow}>
-              <Image source={{ uri: curator.imageUrl }} style={styles.curatorAvatar} />
-              <View style={styles.curatorInfo}>
-                <Text style={styles.curatorName}>{curator.name}</Text>
-                <Text style={styles.curatorSpecialty}>{curator.specialty}</Text>
-                <Text style={styles.curatorFollowers}>{curator.followers} followers</Text>
-              </View>
-              <TouchableOpacity
-                style={[
-                  styles.followBtn,
-                  followed[curator.id] && { backgroundColor: meta.color, borderColor: meta.color },
-                ]}
-                onPress={() =>
-                  setFollowed((prev) => ({ ...prev, [curator.id]: !prev[curator.id] }))
-                }>
-                <Text
-                  style={[
-                    styles.followBtnText,
-                    followed[curator.id] && { color: '#fff' },
-                  ]}>
-                  {followed[curator.id] ? 'Following' : 'Follow'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          ))}
+          {!loading &&
+            categoryItems.map((ep) => {
+              return (
+                <TouchableOpacity
+                  key={ep.id}
+                  style={styles.episodeCard}
+                  activeOpacity={0.88}
+                  onPress={() => openPodcastSummary(router, ep)}>
+                  <Image
+                    source={{ uri: ep.coverImageUrl?.trim() || FALLBACK_COVER }}
+                    style={styles.episodeImage}
+                  />
+                  <View style={styles.episodeOverlay} />
+                  <View style={styles.episodeFavBtn}>
+                    <PodcastCardFavorite item={ep} browseCategoryLabel={category} dark size={16} />
+                  </View>
+                  <View style={styles.episodeContent}>
+                    <Text style={styles.episodeTag}>{categoryTag(ep)}</Text>
+                    <Text style={styles.episodeTitle}>{ep.title ?? 'Untitled'}</Text>
+                    <View style={styles.episodeFooter}>
+                      <Text style={styles.episodeDuration}>
+                        {formatDurationMinutes(ep.durationSeconds)}
+                      </Text>
+                      <TouchableOpacity style={[styles.episodePlayBtn, { backgroundColor: meta.color }]}>
+                        <MaterialIcons name="play-arrow" size={18} color="#fff" />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          {!loading && categoryItems.length === 0 && (
+            <Text style={styles.emptyHint}>No shows in this category right now.</Text>
+          )}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -443,6 +418,17 @@ const styles = StyleSheet.create({
   },
 
   /* Section */
+  loaderWrap: {
+    paddingVertical: 20,
+    alignItems: 'center',
+  },
+
+  emptyHint: {
+    fontSize: 13,
+    color: '#8A8F9A',
+    marginTop: 8,
+  },
+
   section: {
     paddingHorizontal: 16,
     marginBottom: 30,
@@ -496,6 +482,13 @@ const styles = StyleSheet.create({
   trendingCardOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(10,8,30,0.55)',
+  },
+
+  trendingFavBtn: {
+    position: 'absolute',
+    top: 10,
+    left: 10,
+    zIndex: 10,
   },
 
   trendingPlayBtn: {

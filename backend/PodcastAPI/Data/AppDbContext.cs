@@ -16,6 +16,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<UserQuizAttempt> UserQuizAttempts { get; set; }
     public DbSet<ListeningHistory> ListeningHistories { get; set; }
     public DbSet<ExternalListeningHistory> ExternalListeningHistories { get; set; }
+    public DbSet<ExternalFavorite> ExternalFavorites { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -199,6 +200,21 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.Property(e => e.LastListenedAt).HasColumnName("lastlistenedat");
 
             entity.HasIndex(e => new { e.UserId, e.ListenNotesEpisodeId }).IsUnique();
+        });
+
+        modelBuilder.Entity<ExternalFavorite>(entity =>
+        {
+            entity.ToTable("external_favorites", t => t.ExcludeFromMigrations());
+            entity.HasKey(e => new { e.UserId, e.ListenNotesPodcastId });
+            entity.Property(e => e.UserId).HasColumnName("userid");
+            entity.Property(e => e.ListenNotesPodcastId).HasColumnName("listen_notes_podcast_id").HasMaxLength(64).IsRequired();
+            entity.Property(e => e.Title).HasColumnName("title");
+            entity.Property(e => e.AudioUrl).HasColumnName("audiourl");
+            entity.Property(e => e.DurationSeconds).HasColumnName("durationseconds");
+            entity.Property(e => e.CoverImageUrl).HasColumnName("coverimageurl");
+            entity.Property(e => e.Publisher).HasColumnName("publisher");
+            entity.Property(e => e.CategoryBlob).HasColumnName("categoryblob").HasMaxLength(500);
+            entity.Property(e => e.CreatedAt).HasColumnName("createdat");
         });
 
     }

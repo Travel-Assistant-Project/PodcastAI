@@ -102,13 +102,12 @@ export default function CreateScreen() {
     <SafeAreaView style={styles.screen} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.headerIconBtn}>
-          <MaterialIcons name="menu" size={22} color="#111318" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>PodcastAI</Text>
-        <TouchableOpacity style={styles.headerIconBtn}>
-          <MaterialIcons name="search" size={22} color="#5A5F6A" />
-        </TouchableOpacity>
+            <View style={styles.headerLeft}>
+          <MaterialIcons name="auto-awesome" size={16} color="#8B8FFF" />
+          <Text style={styles.headerBrand}>PodcastAI</Text>
+          <View style={styles.headerDivider} />
+          <Text style={styles.headerPage}>Generate</Text>
+        </View>
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
@@ -350,9 +349,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingVertical: 13,
+    paddingVertical: 14,
   },
-
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   headerIconBtn: {
     width: 36,
     height: 36,
@@ -474,6 +477,24 @@ const styles = StyleSheet.create({
     backgroundColor: '#EEF1FF',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+
+  headerBrand: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#002E83',
+  },
+
+  headerDivider: {
+    width: 1,
+    height: 14,
+    backgroundColor: '#D6DAE6',
+  },
+
+  headerPage: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#8A8F9A',
   },
 
   hostVoiceLabel: {

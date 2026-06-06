@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { login } from '@/src/api/auth.api';
 import { getApiErrorMessage } from '@/src/api/errorMessage';
 import { setAuthToken } from '@/src/api/client';
+import { useFavorites } from '@/src/context/FavoritesContext';
 import { setUser } from '@/src/store/authStore';
 
 const LoginScreen = () => {
@@ -22,6 +23,7 @@ const LoginScreen = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const router = useRouter();
+  const { refresh: refreshFavorites } = useFavorites();
 
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
@@ -40,6 +42,7 @@ const LoginScreen = () => {
 
       setAuthToken(response.token);
       setUser(response);
+      await refreshFavorites();
       router.replace('/(tabs)');
     } catch (error: unknown) {
       const message = getApiErrorMessage(
