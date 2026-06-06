@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  podcast-db:
+    image: postgres:15-alpine
+    container_name: podcast_postgres_db
+    environment:
+      POSTGRES_DB: podcast_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: supersecretpassword
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - podcast-network
+
+  podcast-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: podcast_net_backend
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - DB_HOST=podcast-db
+      - DB_PORT=5432
+      - DB_NAME=podcast_db
+      - DB_USER=postgres
+      - DB_PASS=supersecretpassword
+      - JWT_SECRET=bu_senin_cok_gizli_ve_en_az_32_karakterli_anahtarin_123456
+      - AI_SERVICE_SECRET=6zNMp1rRwEDZpXSITgSs6a-Ex5T7qsFiYYocV1QLUhSv2pXaOa_O0D7CaYtZY37s
+      - AI_SERVICE_URL=http://localhost:8001
+    ports:
+      - "5193:8080"
+    networks:
+      - podcast-network
+
+volumes:
+  pgdata:
+
+networks:
+  podcast-network:
+    driver: bridge
