@@ -10,6 +10,7 @@ import {
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
+  ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { register } from '@/src/api/auth.api';
@@ -72,17 +73,22 @@ const RegisterScreen = () => {
         style={styles.keyboard}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 6 : 0}>
-        <View style={styles.inner}>
-          <View style={styles.headerBlock}>
-            <View style={styles.logoCircle}>
-              <Ionicons name="sparkles" size={26} color="#002E83" />
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}>
+          <View style={styles.contentBlock}>
+            <View style={styles.headerBlock}>
+              <View style={styles.logoCircle}>
+                <Ionicons name="sparkles" size={26} color="#002E83" />
+              </View>
+
+              <Text style={styles.title}>Create Account</Text>
+              <Text style={styles.subtitle}>Join to get podcasts tailored to you.</Text>
             </View>
 
-            <Text style={styles.title}>Create Account</Text>
-            <Text style={styles.subtitle}>Join to get podcasts tailored to you.</Text>
-          </View>
-
-          <View style={styles.formBlock}>
+            <View style={styles.formBlock}>
               <Text style={styles.label}>FULL NAME</Text>
               <View style={styles.inputWrapper}>
                 <TextInput
@@ -168,8 +174,6 @@ const RegisterScreen = () => {
               ) : null}
             </View>
 
-            <View style={styles.spacer} />
-
             <View style={styles.footerBlock}>
               <Text style={styles.termsText}>
                 By signing up, you agree to our{' '}
@@ -196,7 +200,8 @@ const RegisterScreen = () => {
               </TouchableOpacity>
             </View>
           </View>
-        </KeyboardAvoidingView>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 };
@@ -213,30 +218,30 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 
-  inner: {
+  scroll: {
     flex: 1,
+  },
+
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
     paddingHorizontal: 28,
-    paddingTop: 6,
-    paddingBottom: 8,
+    paddingVertical: 16,
+  },
+
+  contentBlock: {
+    width: '100%',
   },
 
   headerBlock: {
     alignItems: 'center',
+    marginBottom: 12,
   },
 
-  formBlock: {
-    flexGrow: 0,
-  },
-
-  spacer: {
-    flexGrow: 1,
-    flexShrink: 1,
-    minHeight: 4,
-  },
+  formBlock: {},
 
   footerBlock: {
-    flexGrow: 0,
-    paddingTop: 4,
+    marginTop: 24,
   },
 
   logoCircle: {
@@ -247,7 +252,7 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 10,
+    marginBottom: 12,
     shadowColor: '#000',
     shadowOpacity: 0.08,
     shadowRadius: 18,
@@ -260,16 +265,16 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#111318',
     textAlign: 'center',
-    marginBottom: 4,
+    marginBottom: 6,
     letterSpacing: -0.3,
   },
 
   subtitle: {
     fontSize: 14,
-    lineHeight: 20,
+    lineHeight: 18,
     color: '#626778',
     textAlign: 'center',
-    marginBottom: 14,
+    marginBottom: 20,
     paddingHorizontal: 8,
   },
 
@@ -289,7 +294,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: 14,
   },
 
   input: {
@@ -322,8 +327,8 @@ const styles = StyleSheet.create({
     shadowRadius: 14,
     shadowOffset: { width: 0, height: 8 },
     elevation: 6,
-    marginTop: 4,
-    marginBottom: 6,
+    marginTop: 6,
+    marginBottom: 0,
   },
 
   signUpButtonText: {
@@ -343,9 +348,9 @@ const styles = StyleSheet.create({
   termsText: {
     textAlign: 'center',
     fontSize: 12,
-    lineHeight: 17,
+    lineHeight: 16,
     color: '#626778',
-    marginBottom: 12,
+    marginBottom: 14,
     paddingHorizontal: 2,
   },
 
@@ -357,7 +362,7 @@ const styles = StyleSheet.create({
   memberDividerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: 14,
   },
 
   memberDivider: {
@@ -392,7 +397,7 @@ const styles = StyleSheet.create({
   },
 
   backRow: {
-    marginTop: 8,
+    marginTop: 14,
     alignItems: 'center',
   },
 
