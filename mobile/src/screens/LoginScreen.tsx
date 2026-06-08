@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
+  ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { login } from '@/src/api/auth.api';
@@ -60,70 +61,81 @@ const LoginScreen = () => {
         style={styles.keyboard}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 6 : 0}>
-        <View style={styles.inner}>
-          <View style={styles.mainBlock}>
-            <View style={styles.logoCircle}>
-              <Ionicons name="sparkles" size={28} color="#002E83" />
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}>
+          <View style={styles.contentBlock}>
+            <View style={styles.headerBlock}>
+              <View style={styles.logoCircle}>
+                <Ionicons name="sparkles" size={26} color="#002E83" />
+              </View>
+
+              <Text style={styles.title}>Welcome Back</Text>
+              <Text style={styles.subtitle}>Sign in to continue to your library.</Text>
             </View>
 
-            <Text style={styles.title}>Welcome Back</Text>
-            <Text style={styles.subtitle}>Sign in to continue to your library.</Text>
+            <View style={styles.formBlock}>
+              <Text style={styles.label}>EMAIL ADDRESS</Text>
+              <View style={styles.inputWrapper}>
+                <TextInput
+                  style={styles.input}
+                  placeholder="you@example.com"
+                  placeholderTextColor="#B6BAC2"
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                  value={email}
+                  onChangeText={setEmail}
+                />
+              </View>
 
-            <Text style={styles.label}>EMAIL ADDRESS</Text>
-            <View style={styles.inputWrapper}>
-              <TextInput
-                style={styles.input}
-                placeholder="you@example.com"
-                placeholderTextColor="#B6BAC2"
-                autoCapitalize="none"
-                keyboardType="email-address"
-                value={email}
-                onChangeText={setEmail}
-              />
+              <Text style={styles.label}>PASSWORD</Text>
+              <View style={styles.inputWrapper}>
+                <TextInput
+                  style={styles.input}
+                  placeholder="••••••••"
+                  placeholderTextColor="#AEB3BC"
+                  secureTextEntry
+                  autoCorrect={false}
+                  autoCapitalize="none"
+                  textContentType="password"
+                  value={password}
+                  onChangeText={setPassword}
+                />
+              </View>
+
+              <TouchableOpacity
+                style={styles.signInButton}
+                activeOpacity={0.85}
+                onPress={handleLogin}
+                disabled={isSubmitting}>
+                <Text style={styles.signInText}>
+                  {isSubmitting ? 'Signing In...' : 'Sign In →'}
+                </Text>
+              </TouchableOpacity>
+              {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
             </View>
 
-            <Text style={styles.label}>PASSWORD</Text>
-            <View style={styles.inputWrapper}>
-              <TextInput
-                style={styles.input}
-                placeholder="••••••••"
-                placeholderTextColor="#AEB3BC"
-                secureTextEntry
-                autoCorrect={false}
-                autoCapitalize="none"
-                textContentType="password"
-                value={password}
-                onChangeText={setPassword}
-              />
-            </View>
+            <View style={styles.footerBlock}>
+              <View style={styles.memberDividerRow}>
+                <View style={styles.memberDivider} />
+                <Text style={styles.memberText}>NO ACCOUNT?</Text>
+                <View style={styles.memberDivider} />
+              </View>
 
-            <TouchableOpacity
-              style={styles.signInButton}
-              activeOpacity={0.85}
-              onPress={handleLogin}
-              disabled={isSubmitting}>
-              <Text style={styles.signInText}>
-                {isSubmitting ? 'Signing In...' : 'Sign In →'}
-              </Text>
-            </TouchableOpacity>
-            {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
-          </View>
+              <TouchableOpacity
+                style={styles.returnButton}
+                onPress={() => router.replace('/register')}>
+                <Text style={styles.returnButtonText}>CREATE ACCOUNT</Text>
+              </TouchableOpacity>
 
-          <View style={styles.footerBlock}>
-            <View style={styles.signUpRow}>
-              <Text style={styles.noAccount}>No account? </Text>
-              <TouchableOpacity onPress={() => router.push('/register')}>
-                <Text style={styles.signUpLink}>Create one</Text>
+              <TouchableOpacity style={styles.backRow} onPress={() => router.replace('/')}>
+                <Text style={styles.backText}>← Back to Welcome</Text>
               </TouchableOpacity>
             </View>
-
-            <TouchableOpacity style={styles.backRow} onPress={() => router.replace('/')}>
-              <Text style={styles.backText}>← Back to Welcome</Text>
-            </TouchableOpacity>
-
-            <Text style={styles.footer}>© PODCAST-AI</Text>
           </View>
-        </View>
+        </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -139,27 +151,35 @@ const styles = StyleSheet.create({
   keyboard: {
     flex: 1,
   },
-  inner: {
+  scroll: {
     flex: 1,
-    paddingHorizontal: 28,
-    paddingBottom: 8,
   },
-  mainBlock: {
-    flex: 1,
+  scrollContent: {
+    flexGrow: 1,
     justifyContent: 'center',
+    paddingHorizontal: 28,
+    paddingVertical: 16,
   },
+  contentBlock: {
+    width: '100%',
+  },
+  headerBlock: {
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  formBlock: {},
   footerBlock: {
-    paddingTop: 8,
+    marginTop: 24,
   },
   logoCircle: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     backgroundColor: '#FFFFFF',
     alignSelf: 'center',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 18,
+    marginBottom: 12,
     shadowColor: '#000',
     shadowOpacity: 0.08,
     shadowRadius: 18,
@@ -167,20 +187,20 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   title: {
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: '700',
     color: '#111318',
     textAlign: 'center',
-    marginBottom: 8,
+    marginBottom: 6,
     letterSpacing: -0.3,
   },
   subtitle: {
-    fontSize: 15,
-    lineHeight: 22,
+    fontSize: 14,
+    lineHeight: 18,
     color: '#626778',
     textAlign: 'center',
-    marginBottom: 28,
-    paddingHorizontal: 12,
+    marginBottom: 20,
+    paddingHorizontal: 8,
   },
   label: {
     fontSize: 12,
@@ -191,22 +211,22 @@ const styles = StyleSheet.create({
     marginLeft: 4,
   },
   inputWrapper: {
-    minHeight: 52,
+    minHeight: 48,
     backgroundColor: '#F2F3F6',
     borderRadius: 16,
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 14,
   },
   input: {
     flex: 1,
-    fontSize: 16,
+    fontSize: 15,
     color: '#111318',
-    paddingVertical: 14,
+    paddingVertical: 12,
   },
   signInButton: {
-    height: 54,
+    height: 50,
     borderRadius: 16,
     backgroundColor: '#0714B8',
     alignItems: 'center',
@@ -216,50 +236,61 @@ const styles = StyleSheet.create({
     shadowRadius: 14,
     shadowOffset: { width: 0, height: 8 },
     elevation: 6,
-    marginTop: 4,
-    marginBottom: 12,
+    marginTop: 6,
+    marginBottom: 0,
   },
   signInText: {
     color: '#FFFFFF',
-    fontSize: 17,
+    fontSize: 18,
     fontWeight: '800',
   },
   errorText: {
-    marginBottom: 14,
+    marginTop: 4,
+    marginBottom: 0,
     textAlign: 'center',
     color: '#B91C1C',
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
   },
-  signUpRow: {
+  memberDividerRow: {
     flexDirection: 'row',
-    justifyContent: 'center',
     alignItems: 'center',
-    flexWrap: 'wrap',
+    marginBottom: 14,
   },
-  noAccount: {
-    fontSize: 15,
-    color: '#30333B',
+  memberDivider: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#E1E3E8',
   },
-  signUpLink: {
-    fontSize: 15,
-    color: '#002E83',
+  memberText: {
+    marginHorizontal: 14,
+    fontSize: 11,
+    letterSpacing: 2,
+    color: '#8A8F99',
     fontWeight: '700',
   },
+  returnButton: {
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: '#E9EAED',
+    alignSelf: 'center',
+    paddingHorizontal: 26,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  returnButtonText: {
+    color: '#5D6578',
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 1.5,
+  },
   backRow: {
-    marginTop: 20,
+    marginTop: 14,
     alignItems: 'center',
   },
   backText: {
     fontSize: 14,
     color: '#8A8F99',
     fontWeight: '600',
-  },
-  footer: {
-    marginTop: 20,
-    textAlign: 'center',
-    color: '#9EA3AE',
-    fontSize: 11,
-    letterSpacing: 2,
   },
 });
