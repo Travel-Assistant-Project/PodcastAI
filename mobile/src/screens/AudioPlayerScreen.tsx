@@ -25,7 +25,9 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 
+import { toFavoriteSnapshot } from '@/src/api/favorites.api';
 import { getListenNotesPodcastDetail, getPodcastById, type PodcastDetail, type TranscriptSegment } from '@/src/api/podcasts.api';
+import FavoriteButton from '@/src/components/FavoriteButton';
 import { usePlayback } from '@/src/context/PlaybackContext';
 import { categoryAccentColor } from '@/src/utils/categoryAccent';
 
@@ -275,6 +277,9 @@ export default function AudioPlayerScreen() {
 
   const transcript = podcast?.transcript ?? [];
   const isLearning = !!podcast?.learningMode;
+  const isExternal =
+    podcast?.status?.toLowerCase() === 'external' ||
+    Boolean(podcast?.listenNotesPodcastId?.trim());
   const hasTranscriptPanel = showCaption && transcript.length > 0;
 
   const sheetMetrics = useMemo(() => {
@@ -434,13 +439,37 @@ export default function AudioPlayerScreen() {
                   <Text style={styles.headerSub}>NOW PLAYING</Text>
                   <Text style={styles.headerTitle}>PodcastAI</Text>
                 </View>
-                <TouchableOpacity
-                  onPress={() => void handleStopAndClose()}
-                  style={styles.headerBtn}
-                  accessibilityRole="button"
-                  accessibilityLabel="Stop playback and close">
-                  <MaterialIcons name="close" size={24} color="#111318" />
-                </TouchableOpacity>
+                <View style={styles.headerRight}>
+                  {podcast ? (
+                    <FavoriteButton
+                      podcastId={podcast.listenNotesPodcastId?.trim() ? undefined : podcast.id}
+                      listenNotesPodcastId={podcast.listenNotesPodcastId?.trim() || undefined}
+                      snapshot={
+                        podcast.listenNotesPodcastId?.trim() || isExternal
+                          ? toFavoriteSnapshot({
+                              id: podcast.id,
+                              title: podcast.title,
+                              audioUrl: podcast.audioUrl,
+                              durationSeconds: podcast.durationSeconds,
+                              status: podcast.status,
+                              categories: podcast.categories,
+                              coverImageUrl: podcast.coverImageUrl,
+                              publisher: podcast.publisher,
+                              createdAt: podcast.createdAt,
+                            })
+                          : undefined
+                      }
+                      size={20}
+                    />
+                  ) : null}
+                  <TouchableOpacity
+                    onPress={() => void handleStopAndClose()}
+                    style={styles.headerBtn}
+                    accessibilityRole="button"
+                    accessibilityLabel="Stop playback and close">
+                    <MaterialIcons name="close" size={24} color="#111318" />
+                  </TouchableOpacity>
+                </View>
               </View>
             </View>
           </GestureDetector>
@@ -481,12 +510,12 @@ export default function AudioPlayerScreen() {
                   <MaterialIcons name="school" size={12} color="#fff" />
                   <Text style={styles.cefrBadgeText}>{podcast.cefrLevel}</Text>
                 </View>
-              ) : (
+              ) : !isExternal ? (
                 <View style={styles.aiBadge}>
                   <MaterialIcons name="auto-awesome" size={11} color="#0714B8" />
                   <Text style={styles.aiBadgeText}>AI ENHANCED</Text>
                 </View>
-              ))}
+              ) : null)}
           </View>
 
           {/* Track Info */}
@@ -750,6 +779,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingVertical: 12,
+  },
+
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
 
   headerBtn: {

@@ -134,3 +134,39 @@ CREATE INDEX IF NOT EXISTS idx_external_listening_user ON external_listening_his
 
 -- 17.05.2026: Başarısız üretim zamanı — GET /podcasts/latest ana sayfa hero için (5 dk sonra önceki tamamlanan bölüm).
 ALTER TABLE podcasts ADD COLUMN IF NOT EXISTS failedat TIMESTAMP WITH TIME ZONE;
+
+-- 06.06.2026: Listen Notes şov favorileri (podcasts tablosunda satır yok).
+CREATE TABLE IF NOT EXISTS external_favorites (
+    userid                   UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    listen_notes_podcast_id  VARCHAR(64) NOT NULL,
+    title                    TEXT,
+    audiourl                 TEXT,
+    durationseconds          INT,
+    coverimageurl            TEXT,
+    publisher                TEXT,
+    categoryblob             VARCHAR(500),
+    createdat                TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (userid, listen_notes_podcast_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_external_favorites_user ON external_favorites(userid, createdat DESC);
+
+ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS expopushtoken TEXT,
+    ADD COLUMN IF NOT EXISTS notificationsenabled BOOLEAN NOT NULL DEFAULT TRUE;
+
+DROP TABLE IF EXISTS notifications CASCADE;
+
+CREATE TABLE notifications (
+    id          SERIAL PRIMARY KEY,
+    userid      UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    title       VARCHAR(100),
+    message     TEXT,
+    isread      BOOLEAN NOT NULL DEFAULT FALSE,
+    type        VARCHAR(30),
+    podcastid   UUID REFERENCES podcasts(id) ON DELETE SET NULL,
+    createdat   TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_notifications_user_created
+    ON notifications(userid, createdat DESC);

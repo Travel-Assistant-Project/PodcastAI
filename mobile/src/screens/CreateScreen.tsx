@@ -12,6 +12,9 @@ import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useRouter } from 'expo-router';
 
 import { generatePodcast } from '@/src/api/podcasts.api';
+import { ensureNotificationPermissionsAsync } from '@/src/services/notifications';
+import { startWatchingPodcastCompletion } from '@/src/services/podcastCompletionWatcher';
+import { getNotificationsEnabled } from '@/src/store/notificationPrefs';
 import type { CefrLevel } from '@/src/api/learning.api';
 
 /** Görünen isim -> ai-service / NewsAPI _CATEGORY_MAP anahtarı */
@@ -72,6 +75,10 @@ export default function CreateScreen() {
     }
     setIsGenerating(true);
     try {
+      if (getNotificationsEnabled()) {
+        await ensureNotificationPermissionsAsync();
+      }
+
       const resp = await generatePodcast({
         categories: apiCategories,
         tone,
@@ -80,16 +87,9 @@ export default function CreateScreen() {
         learningMode,
         cefrLevel: learningMode ? cefrLevel : null,
       });
-      Alert.alert(
-        'Podcast in progress',
-        'Your episode is being generated in the background. When it is ready, open it from the details screen.',
-        [
-          {
-            text: 'OK',
-            onPress: () => router.push({ pathname: '/podcast', params: { id: resp.podcastId } }),
-          },
-        ],
-      );
+
+      startWatchingPodcastCompletion(resp.podcastId);
+      router.push({ pathname: '/podcast', params: { id: resp.podcastId } });
     } catch (error: any) {
       const msg = error?.response?.data?.message ?? 'Could not start podcast generation.';
       Alert.alert('Error', msg);
@@ -102,13 +102,12 @@ export default function CreateScreen() {
     <SafeAreaView style={styles.screen} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.headerIconBtn}>
-          <MaterialIcons name="menu" size={22} color="#111318" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>PodcastAI</Text>
-        <TouchableOpacity style={styles.headerIconBtn}>
-          <MaterialIcons name="search" size={22} color="#5A5F6A" />
-        </TouchableOpacity>
+            <View style={styles.headerLeft}>
+          <MaterialIcons name="auto-awesome" size={16} color="#8B8FFF" />
+          <Text style={styles.headerBrand}>PodcastAI</Text>
+          <View style={styles.headerDivider} />
+          <Text style={styles.headerPage}>Generate</Text>
+        </View>
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
@@ -350,9 +349,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingVertical: 13,
+    paddingVertical: 14,
   },
-
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   headerIconBtn: {
     width: 36,
     height: 36,
@@ -474,6 +477,24 @@ const styles = StyleSheet.create({
     backgroundColor: '#EEF1FF',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+
+  headerBrand: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#002E83',
+  },
+
+  headerDivider: {
+    width: 1,
+    height: 14,
+    backgroundColor: '#D6DAE6',
+  },
+
+  headerPage: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#8A8F9A',
   },
 
   hostVoiceLabel: {

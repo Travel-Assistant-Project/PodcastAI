@@ -1,11 +1,20 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { useEffect } from 'react';
+import { LogBox } from 'react-native';
 import 'react-native-reanimated';
 
+if (__DEV__) {
+  LogBox.ignoreAllLogs(true);
+}
+
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { FavoritesProvider } from '@/src/context/FavoritesContext';
 import { PlaybackProvider } from '@/src/context/PlaybackContext';
 import MiniPlayerBar from '@/src/components/MiniPlayerBar';
+import { usePushNotifications } from '@/src/hooks/usePushNotifications';
+import { loadNotificationsEnabled } from '@/src/store/notificationPrefs';
 
 export const unstable_settings = {
   anchor: 'index',
@@ -13,9 +22,15 @@ export const unstable_settings = {
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
+  usePushNotifications();
+
+  useEffect(() => {
+    void loadNotificationsEnabled();
+  }, []);
 
   return (
     <PlaybackProvider>
+      <FavoritesProvider>
       <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
         <Stack>
         <Stack.Screen name="index" options={{ headerShown: false }} />
@@ -33,6 +48,7 @@ export default function RootLayout() {
       <MiniPlayerBar />
       <StatusBar style="auto" />
     </ThemeProvider>
+      </FavoritesProvider>
     </PlaybackProvider>
   );
 }

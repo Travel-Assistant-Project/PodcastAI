@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -6,195 +6,207 @@ import {
   ScrollView,
   TouchableOpacity,
   Image,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 
-const FILTERS = ['ALL SAVED', 'TECHNOLOGY', 'SCIENCE', 'BUSINESS', 'ARTS'];
+import {
+  getFavorites,
+  removeListenNotesFavorite,
+  removePodcastFavorite,
+} from '@/src/api/favorites.api';
+import { getProfile } from '@/src/api/user.api';
+import type { PodcastSummary } from '@/src/api/podcasts.api';
+import PodcastCardFavorite from '@/src/components/PodcastCardFavorite';
+import { FAVORITE_FILTERS } from '@/src/constants/categories';
+import { useFavorites } from '@/src/context/FavoritesContext';
+import {
+  categoryTag,
+  favoriteCardSubtitle,
+  matchesFavoriteFilter,
+  openPodcastSummary,
+} from '@/src/utils/podcastNavigation';
 
-const SAVED_PODCASTS = [
-  {
-    id: 'f1',
-    title: 'Sentence: Inside the AI Breakthrough of the Decade',
-    tag: 'AI · FEATURED',
-    date: 'OCT 24, 2024',
-    episode: 'EPISODE 142',
-    duration: '48 MIN',
-    category: 'TECHNOLOGY',
-    featured: true,
-    imageUrl:
-      'https://images.unsplash.com/photo-1677442136019-21780ecad995?q=80&w=800&auto=format&fit=crop',
-  },
-  {
-    id: 'f2',
-    title: 'Quantum Biology: Life at the Edge of Chaos',
-    tag: 'SCI-FI',
-    date: 'NOV 03, 2024',
-    episode: 'EPISODE 88',
-    duration: '36 MIN',
-    category: 'SCIENCE',
-    featured: false,
-    description:
-      'Exploring how birds migrate and plants photosynthesize using subatomic mechanics.',
-    imageUrl:
-      'https://images.unsplash.com/photo-1635070041078-e363dbe005cb?q=80&w=600&auto=format&fit=crop',
-  },
-  {
-    id: 'f3',
-    title: 'The Invisible CEO: Managing Decentralized Organizations',
-    tag: 'BUSINESS',
-    date: 'NOV 14, 2024',
-    episode: 'EPISODE 55',
-    duration: '52 MIN',
-    category: 'BUSINESS',
-    featured: false,
-    description:
-      'How blockchain and AI are rewriting the rules of corporate hierarchy in 2025.',
-    imageUrl:
-      'https://images.unsplash.com/photo-1486325212027-8081e485255e?q=80&w=600&auto=format&fit=crop',
-  },
-  {
-    id: 'f4',
-    title: "The Future of Creativity: When AI Writes the Symphony",
-    tag: "EDITOR'S PICK",
-    date: 'DEC 01, 2024',
-    episode: 'EPISODE 203',
-    duration: '59 MIN',
-    category: 'ARTS',
-    featured: false,
-    description:
-      'A deep dive into the ethical and artistic implications of generative music and its impact on human composers.',
-    imageUrl:
-      'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=600&auto=format&fit=crop',
-  },
-];
+const FALLBACK_COVER =
+  'https://images.unsplash.com/photo-1478737270239-2f02b77fc618?q=80&w=800&auto=format&fit=crop';
+
+function formatSavedDate(iso?: string | null): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).toUpperCase();
+}
 
 export default function FavoritesScreen() {
   const router = useRouter();
-  const [activeFilter, setActiveFilter] = useState('ALL SAVED');
-  const [saved, setSaved] = useState<Record<string, boolean>>(
-    Object.fromEntries(SAVED_PODCASTS.map((p) => [p.id, true]))
+  const { markUnfavorited } = useFavorites();
+  const [activeSlug, setActiveSlug] = useState<string | null>(FAVORITE_FILTERS[0].slug);
+  const [saved, setSaved] = useState<PodcastSummary[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [profilePhotoUrl, setProfilePhotoUrl] = useState<string | null>(null);
+
+  const loadFavorites = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await getFavorites();
+      setSaved(data);
+    } catch {
+      setSaved([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      loadFavorites();
+
+      getProfile()
+        .then((p) => {
+          if (!cancelled) setProfilePhotoUrl(p.photoUrl?.trim() ? p.photoUrl : null);
+        })
+        .catch(() => {
+          if (!cancelled) setProfilePhotoUrl(null);
+        });
+
+      return () => {
+        cancelled = true;
+      };
+    }, [loadFavorites]),
   );
 
-  const filtered =
-    activeFilter === 'ALL SAVED'
-      ? SAVED_PODCASTS
-      : SAVED_PODCASTS.filter((p) => p.category === activeFilter);
+  const filtered = useMemo(
+    () => saved.filter((p) => matchesFavoriteFilter(p, activeSlug)),
+    [saved, activeSlug],
+  );
 
-  const toggleSave = (id: string) =>
-    setSaved((prev) => ({ ...prev, [id]: !prev[id] }));
+  const handleUnfavorite = useCallback(
+    async (item: PodcastSummary) => {
+      const ln = item.listenNotesPodcastId?.trim();
+      try {
+        if (ln) {
+          await removeListenNotesFavorite(ln);
+          markUnfavorited({ listenNotesPodcastId: ln });
+        } else {
+          await removePodcastFavorite(item.id);
+          markUnfavorited({ podcastId: item.id });
+        }
+        setSaved((prev) => prev.filter((p) => p.id !== item.id));
+      } catch {
+        /* keep list unchanged on error */
+      }
+    },
+    [markUnfavorited],
+  );
 
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
-      {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.headerIconBtn}>
-          <MaterialIcons name="search" size={20} color="#5A5F6A" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Archive</Text>
-        <View style={styles.headerAvatar}>
-          <Image
-            source={{ uri: 'https://i.pravatar.cc/100?img=12' }}
-            style={styles.headerAvatarImg}
-          />
+        <View style={styles.headerLeft}>
+          <MaterialIcons name="auto-awesome" size={16} color="#8B8FFF" />
+          <Text style={styles.headerBrand}>PodcastAI</Text>
+          <View style={styles.headerDivider} />
+          <Text style={styles.headerPage}>Favorites</Text>
         </View>
+        <TouchableOpacity
+          style={styles.headerSide}
+          activeOpacity={0.85}
+          onPress={() => router.push('/(tabs)/profile')}
+          accessibilityLabel="Profile">
+          {profilePhotoUrl ? (
+            <Image source={{ uri: profilePhotoUrl }} style={styles.headerAvatarImg} />
+          ) : (
+            <View style={styles.avatarDot} />
+          )}
+        </TouchableOpacity>
       </View>
 
-      {/* Filter Tabs */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.filtersRow}>
-        {FILTERS.map((f) => (
-          <TouchableOpacity
-            key={f}
-            style={[styles.filterTab, activeFilter === f && styles.filterTabActive]}
-            onPress={() => setActiveFilter(f)}
-            activeOpacity={0.8}>
-            <Text style={[styles.filterText, activeFilter === f && styles.filterTextActive]}>
-              {f}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
+      <View style={styles.filtersWrap}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filtersRow}>
+          {FAVORITE_FILTERS.map((f) => {
+            const isActive = activeSlug === f.slug;
+            return (
+              <TouchableOpacity
+                key={f.slug ?? 'all'}
+                activeOpacity={0.8}
+                style={[styles.filterTab, isActive && styles.filterTabActive]}
+                onPress={() => setActiveSlug(f.slug)}>
+                <Text style={[styles.filterText, isActive && styles.filterTextActive]}>
+                  {f.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </View>
+
+      {loading && (
+        <View style={styles.loaderWrap}>
+          <ActivityIndicator color="#0714B8" />
+        </View>
+      )}
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        {filtered.map((item) =>
-          item.featured ? (
-            /* Featured large card */
-            <TouchableOpacity
-              key={item.id}
-              style={styles.featuredCard}
-              activeOpacity={0.88}
-              onPress={() => router.push('/podcast')}>
-              <Image source={{ uri: item.imageUrl }} style={styles.featuredImage} />
-              <View style={styles.featuredOverlay} />
+        {!loading &&
+          filtered.map((item) => {
+            const cover = item.coverImageUrl?.trim() || FALLBACK_COVER;
+            const dateLabel = formatSavedDate(item.createdAt);
+            const tag = categoryTag(item);
+            const subtitle = favoriteCardSubtitle(item);
+
+            return (
               <TouchableOpacity
-                style={[styles.heartBtn, { top: 12, right: 12 }]}
-                onPress={() => toggleSave(item.id)}>
-                <MaterialIcons
-                  name={saved[item.id] ? 'favorite' : 'favorite-border'}
-                  size={18}
-                  color={saved[item.id] ? '#E53935' : '#fff'}
-                />
-              </TouchableOpacity>
-              <View style={styles.featuredContent}>
-                <View style={styles.featuredMeta}>
-                  <Text style={styles.featuredDate}>{item.date}</Text>
-                  <View style={styles.metaDot} />
-                  <Text style={styles.featuredEpisode}>{item.episode}</Text>
-                </View>
-                <Text style={styles.featuredTitle} numberOfLines={3}>
-                  {item.title}
-                </Text>
-              </View>
-            </TouchableOpacity>
-          ) : (
-            /* Regular card */
-            <TouchableOpacity
-              key={item.id}
-              style={styles.card}
-              activeOpacity={0.85}
-              onPress={() => router.push('/podcast')}>
-              <Image source={{ uri: item.imageUrl }} style={styles.cardImage} />
-              <View style={styles.cardBody}>
-                <Text style={styles.cardTag}>{item.tag}</Text>
-                <Text style={styles.cardTitle} numberOfLines={2}>
-                  {item.title}
-                </Text>
-                {item.description ? (
-                  <Text style={styles.cardDesc} numberOfLines={2}>
-                    {item.description}
+                key={item.id}
+                style={styles.card}
+                activeOpacity={0.85}
+                onPress={() => openPodcastSummary(router, item)}>
+                <Image source={{ uri: cover }} style={styles.cardImage} />
+                <View style={styles.cardBody}>
+                  <Text style={styles.cardTag}>{tag}</Text>
+                  <Text style={styles.cardTitle} numberOfLines={2}>
+                    {item.title ?? 'Untitled'}
                   </Text>
-                ) : null}
-                <View style={styles.cardFooter}>
-                  <Text style={styles.cardDate}>{item.date}</Text>
-                  <View style={styles.cardActions}>
-                    <TouchableOpacity onPress={() => toggleSave(item.id)}>
-                      <MaterialIcons
-                        name={saved[item.id] ? 'favorite' : 'favorite-border'}
+                  <Text style={styles.cardDesc} numberOfLines={1}>
+                    {subtitle}
+                  </Text>
+                  <View style={styles.cardFooter}>
+                    <Text style={styles.cardDate}>{dateLabel}</Text>
+                    <View style={styles.cardActions}>
+                      <PodcastCardFavorite
+                        item={item}
                         size={18}
-                        color={saved[item.id] ? '#E53935' : '#C2C7D0'}
+                        onFavoriteChange={(favorited) => {
+                          if (!favorited) void handleUnfavorite(item);
+                        }}
                       />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.playBtn}
-                      onPress={() => router.push('/player')}>
-                      <MaterialIcons name="play-arrow" size={18} color="#fff" />
-                    </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.playBtn}
+                        onPress={() => openPodcastSummary(router, item)}>
+                        <MaterialIcons name="play-arrow" size={18} color="#fff" />
+                      </TouchableOpacity>
+                    </View>
                   </View>
                 </View>
-              </View>
-            </TouchableOpacity>
-          )
-        )}
+              </TouchableOpacity>
+            );
+          })}
 
-        {filtered.length === 0 && (
+        {!loading && filtered.length === 0 && (
           <View style={styles.empty}>
             <MaterialIcons name="favorite-border" size={48} color="#D0D4E0" />
             <Text style={styles.emptyTitle}>No saved podcasts</Text>
-            <Text style={styles.emptyDesc}>Podcasts you save will appear here.</Text>
+            <Text style={styles.emptyDesc}>
+              {activeSlug
+                ? 'Nothing saved in this category yet. Try another filter or save podcasts from Home.'
+                : 'Save podcasts from Home or your generated library to see them here.'}
+            </Text>
           </View>
         )}
       </ScrollView>
@@ -212,54 +224,86 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 14,
   },
 
-  headerIconBtn: {
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+
+  headerBrand: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#002E83',
+  },
+
+  headerDivider: {
+    width: 1,
+    height: 14,
+    backgroundColor: '#D6DAE6',
+  },
+
+  headerPage: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#8A8F9A',
+  },
+
+  headerSide: {
     width: 34,
     height: 34,
-    borderRadius: 17,
-    backgroundColor: '#ECEEF2',
     alignItems: 'center',
     justifyContent: 'center',
   },
 
   headerTitle: {
+    flex: 1,
     fontSize: 17,
     fontWeight: '700',
     color: '#111318',
+    textAlign: 'center',
   },
 
-  headerAvatar: {
+  headerAvatarImg: {
     width: 34,
     height: 34,
     borderRadius: 17,
-    overflow: 'hidden',
+    backgroundColor: '#E2E8F0',
     borderWidth: 2,
     borderColor: '#E2E8F0',
   },
 
-  headerAvatarImg: {
-    width: '100%',
-    height: '100%',
+  avatarDot: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#0F172A',
+    borderWidth: 2,
+    borderColor: '#E2E8F0',
+  },
+
+  filtersWrap: {
+    height: 40,
+    marginBottom: 16,
   },
 
   filtersRow: {
     paddingHorizontal: 16,
-    paddingBottom: 16,
     gap: 8,
+    alignItems: 'center',
+    minHeight: 40,
   },
 
   filterTab: {
-    minWidth: 62,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
     borderRadius: 20,
     backgroundColor: '#E2E7F0',
     borderWidth: 1,
     borderColor: '#CDD5E3',
-    alignItems: 'center',
   },
 
   filterTabActive: {
@@ -268,14 +312,18 @@ const styles = StyleSheet.create({
   },
 
   filterText: {
-    fontSize: 11,
-    fontWeight: '800',
+    fontSize: 12,
+    fontWeight: '700',
     color: '#3F4656',
-    letterSpacing: 0.6,
   },
 
   filterTextActive: {
     color: '#FFFFFF',
+  },
+
+  loaderWrap: {
+    paddingVertical: 24,
+    alignItems: 'center',
   },
 
   scrollContent: {
@@ -284,77 +332,6 @@ const styles = StyleSheet.create({
     gap: 14,
   },
 
-  /* Featured card */
-  featuredCard: {
-    borderRadius: 18,
-    overflow: 'hidden',
-    height: 200,
-  },
-
-  featuredImage: {
-    width: '100%',
-    height: '100%',
-    position: 'absolute',
-  },
-
-  featuredOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(10,8,30,0.52)',
-  },
-
-  heartBtn: {
-    position: 'absolute',
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(0,0,0,0.35)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  featuredContent: {
-    position: 'absolute',
-    bottom: 16,
-    left: 16,
-    right: 16,
-  },
-
-  featuredMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 6,
-    gap: 6,
-  },
-
-  featuredDate: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: 'rgba(255,255,255,0.65)',
-    letterSpacing: 0.5,
-  },
-
-  metaDot: {
-    width: 3,
-    height: 3,
-    borderRadius: 1.5,
-    backgroundColor: 'rgba(255,255,255,0.4)',
-  },
-
-  featuredEpisode: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: 'rgba(255,255,255,0.65)',
-    letterSpacing: 0.5,
-  },
-
-  featuredTitle: {
-    fontSize: 17,
-    fontWeight: '800',
-    color: '#FFFFFF',
-    lineHeight: 24,
-  },
-
-  /* Regular card */
   card: {
     flexDirection: 'row',
     backgroundColor: '#FFFFFF',
@@ -366,47 +343,46 @@ const styles = StyleSheet.create({
 
   cardImage: {
     width: 110,
-    height: 'auto',
-    minHeight: 130,
+    height: 130,
   },
 
   cardBody: {
     flex: 1,
-    padding: 14,
+    padding: 12,
     justifyContent: 'space-between',
   },
 
   cardTag: {
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: '800',
     color: '#0714B8',
-    letterSpacing: 1.3,
-    marginBottom: 5,
+    letterSpacing: 0.8,
+    marginBottom: 4,
   },
 
   cardTitle: {
     fontSize: 14,
     fontWeight: '700',
     color: '#111318',
-    lineHeight: 20,
-    marginBottom: 4,
+    lineHeight: 19,
   },
 
   cardDesc: {
     fontSize: 12,
-    color: '#8A8F9A',
+    color: '#6B7280',
+    marginTop: 4,
     lineHeight: 17,
-    marginBottom: 8,
   },
 
   cardFooter: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 8,
   },
 
   cardDate: {
-    fontSize: 10,
+    fontSize: 11,
     color: '#8A8F9A',
     fontWeight: '600',
   },
@@ -414,33 +390,34 @@ const styles = StyleSheet.create({
   cardActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 10,
   },
 
   playBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     backgroundColor: '#0714B8',
     alignItems: 'center',
     justifyContent: 'center',
   },
 
-  /* Empty state */
   empty: {
     alignItems: 'center',
-    paddingVertical: 60,
-    gap: 12,
+    paddingVertical: 48,
+    gap: 8,
   },
 
   emptyTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '700',
-    color: '#3D4048',
+    color: '#111318',
   },
 
   emptyDesc: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#8A8F9A',
+    textAlign: 'center',
+    paddingHorizontal: 24,
   },
 });

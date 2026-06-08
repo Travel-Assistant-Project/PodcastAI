@@ -19,6 +19,11 @@ import { setAuthToken } from '@/src/api/client';
 import { getUser, setUser } from '@/src/store/authStore';
 import { getProfile, uploadProfilePhoto, type UserProfile } from '@/src/api/user.api';
 import { usePlayback } from '@/src/context/PlaybackContext';
+import { ensureNotificationPermissionsAsync } from '@/src/services/notifications';
+import {
+  loadNotificationsEnabled,
+  setNotificationsEnabled as saveNotificationsEnabled,
+} from '@/src/store/notificationPrefs';
 
 function DefaultAvatar({ size }: Readonly<{ size: number }>) {
   return (
@@ -49,7 +54,24 @@ export default function ProfileScreen() {
     getProfile()
       .then(setProfile)
       .catch(() => setProfile(null));
+    void loadNotificationsEnabled().then(setNotificationsEnabled);
   }, []);
+
+  const handleNotificationsToggle = async (value: boolean) => {
+    if (value) {
+      const permitted = await ensureNotificationPermissionsAsync();
+      if (!permitted) {
+        Alert.alert(
+          'Permission required',
+          'Enable notifications in your device settings to receive podcast alerts.',
+        );
+        return;
+      }
+    }
+
+    await saveNotificationsEnabled(value);
+    setNotificationsEnabled(value);
+  };
 
   const handlePickPhoto = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -225,11 +247,15 @@ export default function ProfileScreen() {
               </View>
               <View style={styles.prefContent}>
                 <Text style={styles.prefTitle}>Notifications</Text>
-                <Text style={styles.prefSub}>Smart AI summaries enabled</Text>
+                <Text style={styles.prefSub}>
+                  {notificationsEnabled
+                    ? 'Podcast ready alerts enabled'
+                    : 'Podcast ready alerts disabled'}
+                </Text>
               </View>
               <Switch
                 value={notificationsEnabled}
-                onValueChange={setNotificationsEnabled}
+                onValueChange={handleNotificationsToggle}
                 trackColor={{ false: '#D1D5DB', true: '#0714B8' }}
                 thumbColor="#FFFFFF"
                 ios_backgroundColor="#D1D5DB"

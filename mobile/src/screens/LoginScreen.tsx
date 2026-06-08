@@ -7,21 +7,22 @@ import {
   StyleSheet,
   TextInput,
   TouchableOpacity,
-  ScrollView,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { login } from '@/src/api/auth.api';
 import { getApiErrorMessage } from '@/src/api/errorMessage';
 import { setAuthToken } from '@/src/api/client';
+import { useFavorites } from '@/src/context/FavoritesContext';
 import { setUser } from '@/src/store/authStore';
-
 const LoginScreen = () => {
-  const [remember, setRemember] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const router = useRouter();
+  const { refresh: refreshFavorites } = useFavorites();
 
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
@@ -40,6 +41,7 @@ const LoginScreen = () => {
 
       setAuthToken(response.token);
       setUser(response);
+      await refreshFavorites();
       router.replace('/(tabs)');
     } catch (error: unknown) {
       const message = getApiErrorMessage(
@@ -54,101 +56,75 @@ const LoginScreen = () => {
 
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'bottom']}>
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-        contentContainerStyle={styles.scrollContent}>
-        <View style={styles.logoCircle}>
-          <Ionicons name="sparkles" size={28} color="#002E83" />
-        </View>
+      <KeyboardAvoidingView
+        style={styles.keyboard}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 6 : 0}>
+        <View style={styles.inner}>
+          <View style={styles.mainBlock}>
+            <View style={styles.logoCircle}>
+              <Ionicons name="sparkles" size={28} color="#002E83" />
+            </View>
 
-        <Text style={styles.title}>Welcome Back</Text>
-        <Text style={styles.subtitle}>Sign in to continue to your library.</Text>
+            <Text style={styles.title}>Welcome Back</Text>
+            <Text style={styles.subtitle}>Sign in to continue to your library.</Text>
 
-        <Text style={styles.label}>EMAIL ADDRESS</Text>
-        <View style={styles.inputWrapper}>
-          <TextInput
-            style={styles.input}
-            placeholder="you@example.com"
-            placeholderTextColor="#B6BAC2"
-            autoCapitalize="none"
-            keyboardType="email-address"
-            value={email}
-            onChangeText={setEmail}
-          />
-        </View>
+            <Text style={styles.label}>EMAIL ADDRESS</Text>
+            <View style={styles.inputWrapper}>
+              <TextInput
+                style={styles.input}
+                placeholder="you@example.com"
+                placeholderTextColor="#B6BAC2"
+                autoCapitalize="none"
+                keyboardType="email-address"
+                value={email}
+                onChangeText={setEmail}
+              />
+            </View>
 
-        <View style={styles.passwordHeader}>
-          <Text style={styles.label}>PASSWORD</Text>
-          <TouchableOpacity hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <Text style={styles.forgot}>Forgot?</Text>
-          </TouchableOpacity>
-        </View>
-        <View style={styles.inputWrapper}>
-          <TextInput
-            style={styles.input}
-            placeholder="••••••••"
-            placeholderTextColor="#AEB3BC"
-            secureTextEntry
-            autoCorrect={false}
-            autoCapitalize="none"
-            textContentType="password"
-            value={password}
-            onChangeText={setPassword}
-          />
-        </View>
+            <Text style={styles.label}>PASSWORD</Text>
+            <View style={styles.inputWrapper}>
+              <TextInput
+                style={styles.input}
+                placeholder="••••••••"
+                placeholderTextColor="#AEB3BC"
+                secureTextEntry
+                autoCorrect={false}
+                autoCapitalize="none"
+                textContentType="password"
+                value={password}
+                onChangeText={setPassword}
+              />
+            </View>
 
-        <TouchableOpacity
-          style={styles.rememberRow}
-          onPress={() => setRemember(!remember)}
-          activeOpacity={0.8}>
-          <View style={[styles.checkbox, remember && styles.checkboxActive]}>
-            {remember ? <Text style={styles.check}>✓</Text> : null}
+            <TouchableOpacity
+              style={styles.signInButton}
+              activeOpacity={0.85}
+              onPress={handleLogin}
+              disabled={isSubmitting}>
+              <Text style={styles.signInText}>
+                {isSubmitting ? 'Signing In...' : 'Sign In →'}
+              </Text>
+            </TouchableOpacity>
+            {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
           </View>
-          <Text style={styles.rememberText}>Remember this device</Text>
-        </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.signInButton}
-          activeOpacity={0.85}
-          onPress={handleLogin}
-          disabled={isSubmitting}>
-          <Text style={styles.signInText}>
-            {isSubmitting ? 'Signing In...' : 'Sign In →'}
-          </Text>
-        </TouchableOpacity>
-        {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
+          <View style={styles.footerBlock}>
+            <View style={styles.signUpRow}>
+              <Text style={styles.noAccount}>No account? </Text>
+              <TouchableOpacity onPress={() => router.push('/register')}>
+                <Text style={styles.signUpLink}>Create one</Text>
+              </TouchableOpacity>
+            </View>
 
-        <View style={styles.dividerRow}>
-          <View style={styles.divider} />
-          <Text style={styles.dividerText}>OR</Text>
-          <View style={styles.divider} />
+            <TouchableOpacity style={styles.backRow} onPress={() => router.replace('/')}>
+              <Text style={styles.backText}>← Back to Welcome</Text>
+            </TouchableOpacity>
+
+            <Text style={styles.footer}>© PODCAST-AI</Text>
+          </View>
         </View>
-
-        <View style={styles.socialRow}>
-          <TouchableOpacity style={styles.socialButton} activeOpacity={0.85}>
-            <Text style={styles.googleIcon}>G</Text>
-            <Text style={styles.socialText}>Google</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.socialButton} activeOpacity={0.85}>
-            <Ionicons name="logo-apple" size={20} color="#000000" style={styles.socialIcon} />
-            <Text style={styles.socialText}>Apple</Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.signUpRow}>
-          <Text style={styles.noAccount}>No account? </Text>
-          <TouchableOpacity onPress={() => router.push('/register')}>
-            <Text style={styles.signUpLink}>Create one</Text>
-          </TouchableOpacity>
-        </View>
-
-        <TouchableOpacity style={styles.backRow} onPress={() => router.replace('/')}>
-          <Text style={styles.backText}>← Back to Welcome</Text>
-        </TouchableOpacity>
-
-        <Text style={styles.footer}>© PODCAST-AI</Text>
-      </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 };
@@ -160,10 +136,20 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F7F8FB',
   },
-  scrollContent: {
+  keyboard: {
+    flex: 1,
+  },
+  inner: {
+    flex: 1,
     paddingHorizontal: 28,
+    paddingBottom: 8,
+  },
+  mainBlock: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  footerBlock: {
     paddingTop: 8,
-    paddingBottom: 32,
   },
   logoCircle: {
     width: 64,
@@ -219,49 +205,6 @@ const styles = StyleSheet.create({
     color: '#111318',
     paddingVertical: 14,
   },
-  passwordHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-    paddingLeft: 4,
-    paddingRight: 2,
-  },
-  forgot: {
-    color: '#002E83',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  rememberRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 2,
-    marginBottom: 20,
-  },
-  checkbox: {
-    width: 22,
-    height: 22,
-    borderRadius: 6,
-    borderWidth: 1.5,
-    borderColor: '#CFD2D8',
-    backgroundColor: '#FFFFFF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 10,
-  },
-  checkboxActive: {
-    backgroundColor: '#002E83',
-    borderColor: '#002E83',
-  },
-  check: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '800',
-  },
-  rememberText: {
-    fontSize: 14,
-    color: '#5A5F6A',
-  },
   signInButton: {
     height: 54,
     borderRadius: 16,
@@ -273,6 +216,7 @@ const styles = StyleSheet.create({
     shadowRadius: 14,
     shadowOffset: { width: 0, height: 8 },
     elevation: 6,
+    marginTop: 4,
     marginBottom: 12,
   },
   signInText: {
@@ -286,52 +230,6 @@ const styles = StyleSheet.create({
     color: '#B91C1C',
     fontSize: 13,
     fontWeight: '600',
-  },
-  dividerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 8,
-    marginBottom: 16,
-  },
-  divider: {
-    flex: 1,
-    height: 1,
-    backgroundColor: '#E1E3E8',
-  },
-  dividerText: {
-    marginHorizontal: 14,
-    fontSize: 11,
-    letterSpacing: 1.5,
-    color: '#8A8F99',
-    fontWeight: '700',
-  },
-  socialRow: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 22,
-  },
-  socialButton: {
-    flex: 1,
-    height: 48,
-    borderRadius: 14,
-    backgroundColor: '#ECEEF2',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  googleIcon: {
-    fontSize: 16,
-    marginRight: 8,
-    color: '#002E83',
-    fontWeight: '800',
-  },
-  socialIcon: {
-    marginRight: 8,
-  },
-  socialText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#15171D',
   },
   signUpRow: {
     flexDirection: 'row',
@@ -358,7 +256,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   footer: {
-    marginTop: 28,
+    marginTop: 20,
     textAlign: 'center',
     color: '#9EA3AE',
     fontSize: 11,
