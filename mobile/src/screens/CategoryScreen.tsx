@@ -149,15 +149,6 @@ export default function CategoryScreen() {
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{category}</Text>
         <View style={styles.headerActions}>
-          <TouchableOpacity style={styles.headerIconBtn}>
-            <MaterialIcons name="search" size={20} color="#5A5F6A" />
-          </TouchableOpacity>
-          <View style={styles.headerAvatar}>
-            <Image
-              source={{ uri: 'https://i.pravatar.cc/100?img=12' }}
-              style={styles.headerAvatarImg}
-            />
-          </View>
         </View>
       </View>
 

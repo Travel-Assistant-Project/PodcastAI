@@ -12,6 +12,9 @@ import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useRouter } from 'expo-router';
 
 import { generatePodcast } from '@/src/api/podcasts.api';
+import { ensureNotificationPermissionsAsync } from '@/src/services/notifications';
+import { startWatchingPodcastCompletion } from '@/src/services/podcastCompletionWatcher';
+import { getNotificationsEnabled } from '@/src/store/notificationPrefs';
 import type { CefrLevel } from '@/src/api/learning.api';
 
 /** Görünen isim -> ai-service / NewsAPI _CATEGORY_MAP anahtarı */
@@ -72,6 +75,10 @@ export default function CreateScreen() {
     }
     setIsGenerating(true);
     try {
+      if (getNotificationsEnabled()) {
+        await ensureNotificationPermissionsAsync();
+      }
+
       const resp = await generatePodcast({
         categories: apiCategories,
         tone,
@@ -80,16 +87,9 @@ export default function CreateScreen() {
         learningMode,
         cefrLevel: learningMode ? cefrLevel : null,
       });
-      Alert.alert(
-        'Podcast in progress',
-        'Your episode is being generated in the background. When it is ready, open it from the details screen.',
-        [
-          {
-            text: 'OK',
-            onPress: () => router.push({ pathname: '/podcast', params: { id: resp.podcastId } }),
-          },
-        ],
-      );
+
+      startWatchingPodcastCompletion(resp.podcastId);
+      router.push({ pathname: '/podcast', params: { id: resp.podcastId } });
     } catch (error: any) {
       const msg = error?.response?.data?.message ?? 'Could not start podcast generation.';
       Alert.alert('Error', msg);

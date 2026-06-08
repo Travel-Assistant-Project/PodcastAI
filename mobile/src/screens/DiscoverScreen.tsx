@@ -125,7 +125,11 @@ export default function DiscoverScreen() {
             </View>
           )}
           {!loading && filtered.length === 0 && (
-            <Text style={styles.emptyHint}>No podcasts match your search right now.</Text>
+            <Text style={styles.emptyHint}>
+              {search.trim()
+                ? 'No podcasts match your search right now.'
+                : 'Trending picks are momentarily unavailable. Browse by category below.'}
+            </Text>
           )}
 
           {!loading &&

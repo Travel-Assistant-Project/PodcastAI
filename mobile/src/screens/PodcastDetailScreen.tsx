@@ -22,6 +22,7 @@ import {
 import TranscriptLine from '@/src/components/TranscriptLine';
 import WordLookupModal from '@/src/components/WordLookupModal';
 import { usePlayback } from '@/src/context/PlaybackContext';
+import { getNotificationsEnabled } from '@/src/store/notificationPrefs';
 
 // Backend MVP'sinde durum 'processing' olabilir; bu durumda kullanıcıyı tutmak yerine
 // kısa aralıklarla yeniden poll ediyoruz.
@@ -312,6 +313,11 @@ export default function PodcastDetailScreen() {
                 {hasScriptPreview
                   ? 'Your episode script is ready below — we are generating the MP3. Listen unlocks when audio is ready; timed captions appear after that.'
                   : 'Fetching headlines and drafting your episode… This screen refreshes automatically.'}
+              </Text>
+              <Text style={styles.processingHint}>
+                {getNotificationsEnabled()
+                  ? "Your episode is being generated in the background. When it is ready, open it from the details"
+                  : 'Keep this screen open to follow along, or find it later in Past Episodes.'}
               </Text>
             </View>
           </View>
@@ -610,6 +616,7 @@ const styles = StyleSheet.create({
   },
   processingTitle: { fontWeight: '800', color: '#0714B8', marginBottom: 2, fontSize: 14 },
   processingDesc: { color: '#3D4048', fontSize: 12 },
+  processingHint: { color: '#8A8F9A', fontSize: 11, marginTop: 6, lineHeight: 16 },
 
   scriptPreviewCard: {
     marginHorizontal: 16,
