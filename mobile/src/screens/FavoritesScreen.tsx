@@ -43,7 +43,7 @@ function formatSavedDate(iso?: string | null): string {
 export default function FavoritesScreen() {
   const router = useRouter();
   const { markUnfavorited } = useFavorites();
-  const [activeFilter, setActiveFilter] = useState<string>(FAVORITE_FILTERS[0].label);
+  const [activeSlug, setActiveSlug] = useState<string | null>(FAVORITE_FILTERS[0].slug);
   const [saved, setSaved] = useState<PodcastSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [profilePhotoUrl, setProfilePhotoUrl] = useState<string | null>(null);
@@ -78,8 +78,6 @@ export default function FavoritesScreen() {
       };
     }, [loadFavorites]),
   );
-
-  const activeSlug = FAVORITE_FILTERS.find((f) => f.label === activeFilter)?.slug ?? null;
 
   const filtered = useMemo(
     () => saved.filter((p) => matchesFavoriteFilter(p, activeSlug)),
@@ -127,25 +125,27 @@ export default function FavoritesScreen() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.filtersScroll}
-        contentContainerStyle={styles.filtersRow}>
-        {FAVORITE_FILTERS.map((f) => (
-          <TouchableOpacity
-            key={f.label}
-            style={[styles.filterTab, activeFilter === f.label && styles.filterTabActive]}
-            onPress={() => setActiveFilter(f.label)}
-            activeOpacity={0.8}>
-            <Text
-              numberOfLines={1}
-              style={[styles.filterText, activeFilter === f.label && styles.filterTextActive]}>
-              {f.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
+      <View style={styles.filtersWrap}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filtersRow}>
+          {FAVORITE_FILTERS.map((f) => {
+            const isActive = activeSlug === f.slug;
+            return (
+              <TouchableOpacity
+                key={f.slug ?? 'all'}
+                activeOpacity={0.8}
+                style={[styles.filterTab, isActive && styles.filterTabActive]}
+                onPress={() => setActiveSlug(f.slug)}>
+                <Text style={[styles.filterText, isActive && styles.filterTextActive]}>
+                  {f.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </View>
 
       {loading && (
         <View style={styles.loaderWrap}>
@@ -285,15 +285,16 @@ const styles = StyleSheet.create({
     borderColor: '#E2E8F0',
   },
 
-  filtersScroll: {
-    flexGrow: 0,
+  filtersWrap: {
+    height: 40,
     marginBottom: 16,
   },
 
   filtersRow: {
     paddingHorizontal: 16,
-    alignItems: 'center',
     gap: 8,
+    alignItems: 'center',
+    minHeight: 40,
   },
 
   filterTab: {
@@ -303,7 +304,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#E2E7F0',
     borderWidth: 1,
     borderColor: '#CDD5E3',
-    alignSelf: 'center',
   },
 
   filterTabActive: {
@@ -312,10 +312,9 @@ const styles = StyleSheet.create({
   },
 
   filterText: {
-    fontSize: 11,
-    fontWeight: '800',
+    fontSize: 12,
+    fontWeight: '700',
     color: '#3F4656',
-    letterSpacing: 0.6,
   },
 
   filterTextActive: {

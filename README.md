@@ -217,3 +217,13 @@ FastAPI çalıştırırken
 React Native çalıştırırken
 
 DOĞRU ÇALIŞTIRILMALI
+
+----------------------
+
+cd mobile
+npx expo prebuild --clean
+npx expo run:ios
+
+
+cd mobile
+npx expo run:ios

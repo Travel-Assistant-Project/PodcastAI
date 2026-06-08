@@ -1,6 +1,8 @@
+using Microsoft.Extensions.Caching.Memory;
 using PodcastAPI.Common;
 using PodcastAPI.Dto;
 using PodcastAPI.Models.External;
+using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
@@ -10,63 +12,42 @@ using System.Text.RegularExpressions;
 
 namespace PodcastAPI.Services.External;
 
-public class ListenNotesService(HttpClient httpClient, ILogger<ListenNotesService> logger) : IExternalPodcastService
+public class ListenNotesService(
+    HttpClient httpClient,
+    ILogger<ListenNotesService> logger,
+    IMemoryCache cache) : IExternalPodcastService
 {
+    private static readonly TimeSpan FreshCacheTtl = TimeSpan.FromHours(1);
+    private static readonly TimeSpan StaleCacheTtl = TimeSpan.FromDays(7);
+    private static DateTime _rateLimitedUntilUtc = DateTime.MinValue;
+
+    private static string BestPodcastsCacheKey(string? genreId) =>
+        $"ln:best:{genreId?.Trim() ?? "all"}";
+
+    private static string BestPodcastsStaleKey(string? genreId) =>
+        $"ln:stale:best:{genreId?.Trim() ?? "all"}";
     private static readonly JsonSerializerOptions ListenNotesJsonOptions =
         new(JsonSerializerDefaults.Web);
 
-    private static readonly SemaphoreSlim GenreMapGate = new(1, 1);
-    private static IReadOnlyDictionary<int, string>? GenreIdToName;
+    private static readonly ConcurrentDictionary<string, SemaphoreSlim> FetchGates = new();
 
-    private static readonly IReadOnlyDictionary<int, string> EmptyGenreMap =
-        new ReadOnlyDictionary<int, string>(new Dictionary<int, string>());
-
-    private async Task<IReadOnlyDictionary<int, string>> EnsureGenreNamesAsync(CancellationToken cancellationToken)
-    {
-        if (GenreIdToName != null)
-            return GenreIdToName;
-
-        await GenreMapGate.WaitAsync(cancellationToken);
-        try
+    /// <summary>GET /genres yerine — her trending isteğinde ekstra API çağrısı yapmamak için.</summary>
+    private static readonly IReadOnlyDictionary<int, string> GenreIdToName =
+        new ReadOnlyDictionary<int, string>(new Dictionary<int, string>
         {
-            if (GenreIdToName != null)
-                return GenreIdToName;
+            [77] = "Sports",
+            [88] = "Health",
+            [93] = "Business",
+            [99] = "World News",
+            [100] = "Entertainment",
+            [107] = "Science",
+            [127] = "Technology",
+            [134] = "Music",
+            [144] = "Finance",
+        });
 
-            ListenNotesGenresEnvelope? env;
-            try
-            {
-                env = await httpClient.GetFromJsonAsync<ListenNotesGenresEnvelope>(
-                    "genres",
-                    ListenNotesJsonOptions,
-                    cancellationToken);
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "Listen Notes genres fetch failed; using neutral podcast categories.");
-                GenreIdToName = EmptyGenreMap;
-                return GenreIdToName;
-            }
-
-            var dict = new Dictionary<int, string>();
-            foreach (var g in env?.Genres ?? new List<ListenNotesGenreRow>())
-            {
-                if (g.Id == 0) continue;
-                var name = g.Name?.Trim();
-                if (string.IsNullOrEmpty(name)) continue;
-                dict[g.Id] = name;
-            }
-
-            GenreIdToName = dict.Count > 0
-                ? new ReadOnlyDictionary<int, string>(dict)
-                : EmptyGenreMap;
-
-            return GenreIdToName;
-        }
-        finally
-        {
-            GenreMapGate.Release();
-        }
-    }
+    private static Task<IReadOnlyDictionary<int, string>> EnsureGenreNamesAsync(CancellationToken cancellationToken) =>
+        Task.FromResult(GenreIdToName);
 
     /// <summary>
     /// Önce Listen Notes genre adları (genre_ids), sonra yayıncı; API ile genre çekimi uyumlu.
@@ -106,44 +87,127 @@ public class ListenNotesService(HttpClient httpClient, ILogger<ListenNotesServic
         int page = 1,
         CancellationToken cancellationToken = default)
     {
+        var cacheKey = BestPodcastsCacheKey(genreId);
+        if (cache.TryGetValue(cacheKey, out List<PodcastSummaryDto>? fresh) && fresh is { Count: > 0 })
+            return fresh;
+
+        if (DateTime.UtcNow < _rateLimitedUntilUtc)
+            return ResolveTrendingFallback(genreId, cacheKey);
+
+        var gate = FetchGates.GetOrAdd(cacheKey, static _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync(cancellationToken);
         try
         {
-            var genres = await EnsureGenreNamesAsync(cancellationToken);
-            var seenLnIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var merged = new List<PodcastSummaryDto>();
+            if (cache.TryGetValue(cacheKey, out List<PodcastSummaryDto>? cachedAfterWait) && cachedAfterWait is { Count: > 0 })
+                return cachedAfterWait;
 
-            async Task FetchPageAsync(int pageNum, CancellationToken ct)
+            if (DateTime.UtcNow < _rateLimitedUntilUtc)
+                return ResolveTrendingFallback(genreId, cacheKey);
+
+            try
             {
-                var url = $"best_podcasts?page={pageNum}";
-                if (!string.IsNullOrEmpty(genreId)) url += $"&genre_id={genreId}";
-
-                var response = await httpClient.GetFromJsonAsync<ListenNotesResponse>(
-                    url,
-                    ListenNotesJsonOptions,
-                    ct);
-
-                foreach (var p in response?.Podcasts ?? Enumerable.Empty<ListenNotesPodcast>())
+                var merged = await FetchBestPodcastsAsync(genreId, page, cancellationToken);
+                if (merged.Count > 0)
                 {
-                    var id = p.Id?.Trim();
-                    if (string.IsNullOrEmpty(id) || !seenLnIds.Add(id))
-                        continue;
-                    merged.Add(MapToDto(p, genres));
+                    cache.Set(cacheKey, merged, FreshCacheTtl);
+                    cache.Set(BestPodcastsStaleKey(genreId), merged, StaleCacheTtl);
+                    return merged;
                 }
+
+                return ResolveTrendingFallback(genreId, cacheKey);
             }
+            catch (Exception ex)
+            {
+                if (IsRateLimited(ex))
+                {
+                    _rateLimitedUntilUtc = DateTime.UtcNow.AddMinutes(30);
+                    logger.LogWarning("Listen Notes rate-limited; pausing external fetches for 30 minutes.");
+                }
+                else
+                {
+                    logger.LogError(ex, "Listen Notes Trending fetch failed.");
+                }
 
-            await FetchPageAsync(page, cancellationToken);
-
-            // Ana sayfa trending için ~10 şov; tek sayfa yetmezse bir sayfa daha (genre filtresi yokken).
-            if (string.IsNullOrEmpty(genreId) && page == 1 && merged.Count < 10)
-                await FetchPageAsync(2, cancellationToken);
-
-            return merged;
+                return ResolveTrendingFallback(genreId, cacheKey);
+            }
         }
-        catch (Exception ex)
+        finally
         {
-            logger.LogError(ex, "Listen Notes Trending fetch failed.");
-            return new();
+            gate.Release();
         }
+    }
+
+    private List<PodcastSummaryDto> ResolveTrendingFallback(string? genreId, string cacheKey)
+    {
+        if (cache.TryGetValue(BestPodcastsStaleKey(genreId), out List<PodcastSummaryDto>? stale) && stale is { Count: > 0 })
+        {
+            logger.LogInformation("Returning stale Listen Notes trending cache for {CacheKey}.", cacheKey);
+            return stale;
+        }
+
+        if (!string.IsNullOrWhiteSpace(genreId)
+            && cache.TryGetValue(BestPodcastsStaleKey(null), out List<PodcastSummaryDto>? globalStale)
+            && globalStale is { Count: > 0 })
+        {
+            var filtered = FilterByGenreLabel(globalStale, genreId).Take(10).ToList();
+            if (filtered.Count > 0)
+                return filtered;
+        }
+
+        logger.LogWarning(
+            "No Listen Notes trending data for {CacheKey}; quota may be exhausted (HTTP 429).",
+            cacheKey);
+        return [];
+    }
+
+    private static bool IsRateLimited(Exception ex) =>
+        ex.Message.Contains("429", StringComparison.Ordinal);
+
+    private static IEnumerable<PodcastSummaryDto> FilterByGenreLabel(
+        IEnumerable<PodcastSummaryDto> items,
+        string genreId)
+    {
+        if (!int.TryParse(genreId.Trim(), out var gid) || !GenreIdToName.TryGetValue(gid, out var label))
+            yield break;
+
+        foreach (var item in items)
+        {
+            if (item.Categories.Any(c => c.Contains(label, StringComparison.OrdinalIgnoreCase)))
+                yield return item;
+        }
+    }
+
+    private async Task<List<PodcastSummaryDto>> FetchBestPodcastsAsync(
+        string? genreId,
+        int page,
+        CancellationToken cancellationToken)
+    {
+        var genres = await EnsureGenreNamesAsync(cancellationToken);
+        var seenLnIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var merged = new List<PodcastSummaryDto>();
+
+        async Task FetchPageAsync(int pageNum, CancellationToken ct)
+        {
+            var url = $"best_podcasts?page={pageNum}";
+            if (!string.IsNullOrEmpty(genreId)) url += $"&genre_id={genreId}";
+
+            var response = await httpClient.GetFromJsonAsync<ListenNotesResponse>(
+                url,
+                ListenNotesJsonOptions,
+                ct);
+
+            foreach (var p in response?.Podcasts ?? Enumerable.Empty<ListenNotesPodcast>())
+            {
+                var id = p.Id?.Trim();
+                if (string.IsNullOrEmpty(id) || !seenLnIds.Add(id))
+                    continue;
+                merged.Add(MapToDto(p, genres));
+            }
+        }
+
+        await FetchPageAsync(page, cancellationToken);
+
+        return merged;
     }
 
     public async Task<PodcastDetailDto?> GetPodcastDetailAsync(
@@ -154,6 +218,10 @@ public class ListenNotesService(HttpClient httpClient, ILogger<ListenNotesServic
         if (string.IsNullOrWhiteSpace(listenNotesPodcastId))
             return null;
 
+        var catalogDetail = ExternalPodcastCatalog.GetDetail(listenNotesPodcastId);
+        if (DateTime.UtcNow < _rateLimitedUntilUtc)
+            return catalogDetail;
+
         try
         {
             var genres = await EnsureGenreNamesAsync(cancellationToken);
@@ -163,14 +231,17 @@ public class ListenNotesService(HttpClient httpClient, ILogger<ListenNotesServic
                 ListenNotesJsonOptions,
                 cancellationToken);
             if (detail == null || string.IsNullOrWhiteSpace(detail.Id))
-                return null;
+                return catalogDetail;
 
             return MapPodcastDetailToDto(detail, episodeId, genres);
         }
         catch (Exception ex)
         {
+            if (IsRateLimited(ex))
+                _rateLimitedUntilUtc = DateTime.UtcNow.AddMinutes(10);
+
             logger.LogError(ex, "Listen Notes podcast detail fetch failed.");
-            return null;
+            return catalogDetail;
         }
     }
 

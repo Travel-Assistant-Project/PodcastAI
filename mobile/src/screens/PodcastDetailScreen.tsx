@@ -12,20 +12,48 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import { openBrowserAsync, WebBrowserPresentationStyle } from 'expo-web-browser';
 
 import {
   getListenNotesPodcastDetail,
   getPodcastById,
   type PodcastDetail,
+  type PodcastSource,
   type TranscriptSegment,
 } from '@/src/api/podcasts.api';
 import TranscriptLine from '@/src/components/TranscriptLine';
 import WordLookupModal from '@/src/components/WordLookupModal';
 import { usePlayback } from '@/src/context/PlaybackContext';
+import { getNotificationsEnabled } from '@/src/store/notificationPrefs';
 
 // Backend MVP'sinde durum 'processing' olabilir; bu durumda kullanıcıyı tutmak yerine
 // kısa aralıklarla yeniden poll ediyoruz.
 const POLL_INTERVAL_MS = 4000;
+
+function hasSourceContent(source: PodcastSource): boolean {
+  return Boolean(
+    source.newsUrl?.trim() || source.newsTitle?.trim() || source.sourceName?.trim(),
+  );
+}
+
+function sourceLabel(source: PodcastSource): string {
+  const title = source.newsTitle?.trim();
+  const name = source.sourceName?.trim();
+  if (title && name) return `${name} — ${title}`;
+  return title || name || 'News article';
+}
+
+async function openSourceUrl(url: string) {
+  const trimmed = url.trim();
+  if (!trimmed) return;
+  try {
+    await openBrowserAsync(trimmed, {
+      presentationStyle: WebBrowserPresentationStyle.AUTOMATIC,
+    });
+  } catch {
+    Alert.alert('Could not open link', 'Try again in a moment.');
+  }
+}
 
 export default function PodcastDetailScreen() {
   const router = useRouter();
@@ -49,6 +77,7 @@ export default function PodcastDetailScreen() {
 
   // Transcript bölümü varsayılan olarak açık; yeni podcast sayfasına geçince sıfırlanır.
   const [showTranscript, setShowTranscript] = useState(true);
+  const [showSources, setShowSources] = useState(false);
   const [showAllTr, setShowAllTr] = useState(false);
   const [perLineTr, setPerLineTr] = useState<Record<number, boolean>>({});
 
@@ -116,6 +145,7 @@ export default function PodcastDetailScreen() {
     setShowAllTr(false);
     setPerLineTr({});
     setShowTranscript(true);
+    setShowSources(false);
   }, [routeEpisodeKey]);
 
   const handleManualRefresh = useCallback(async () => {
@@ -221,6 +251,8 @@ export default function PodcastDetailScreen() {
   const showScriptPreviewPanel =
     hasScriptPreview && !(audioReady && hasTimedTranscript);
 
+  const displaySources = (podcast.sources ?? []).filter(hasSourceContent);
+
   /** Arka planda mini player açıkken içerik listen + mini altında kalmasın */
   const scrollBottomPad = 110 + (playback.track ? 92 : 0);
 
@@ -303,6 +335,62 @@ export default function PodcastDetailScreen() {
           </Text>
         </View>
 
+        {displaySources.length > 0 && (
+          <View style={styles.sourcesCard}>
+            <TouchableOpacity
+              style={styles.sourcesHeader}
+              onPress={() => setShowSources((v) => !v)}
+              activeOpacity={0.7}>
+              <MaterialIcons
+                name={showSources ? 'expand-less' : 'expand-more'}
+                size={20}
+                color="#111318"
+              />
+              <View style={styles.sourcesHeaderText}>
+                <View style={styles.sourcesTitleRow}>
+                  <MaterialIcons name="newspaper" size={18} color="#0714B8" />
+                  <Text style={styles.sourcesTitle}>Sources</Text>
+                </View>
+                <Text style={styles.sourcesSubtitle}>
+                  {showSources
+                    ? 'This episode is based on the following news articles.'
+                    : `${displaySources.length} article${displaySources.length === 1 ? '' : 's'} — tap to expand`}
+                </Text>
+              </View>
+            </TouchableOpacity>
+
+            {showSources &&
+              displaySources.map((source, index) => {
+                const url = source.newsUrl?.trim() ?? '';
+                const label = sourceLabel(source);
+                const key = url || `${source.sourceName ?? ''}-${source.newsTitle ?? ''}-${index}`;
+
+                if (url) {
+                  return (
+                    <TouchableOpacity
+                      key={key}
+                      style={styles.sourceRow}
+                      onPress={() => void openSourceUrl(url)}
+                      activeOpacity={0.7}>
+                      <Text style={styles.sourceRowText} numberOfLines={2}>
+                        {label}
+                      </Text>
+                      <MaterialIcons name="open-in-new" size={16} color="#0714B8" />
+                    </TouchableOpacity>
+                  );
+                }
+
+                return (
+                  <View key={key} style={styles.sourceRow}>
+                    <Text style={styles.sourceRowTextStatic} numberOfLines={2}>
+                      {label}
+                    </Text>
+                  </View>
+                );
+              })}
+          </View>
+        )}
+
         {isProcessing && (
           <View style={styles.processingCard}>
             <ActivityIndicator color="#0714B8" />
@@ -312,6 +400,11 @@ export default function PodcastDetailScreen() {
                 {hasScriptPreview
                   ? 'Your episode script is ready below — we are generating the MP3. Listen unlocks when audio is ready; timed captions appear after that.'
                   : 'Fetching headlines and drafting your episode… This screen refreshes automatically.'}
+              </Text>
+              <Text style={styles.processingHint}>
+                {getNotificationsEnabled()
+                  ? "Your episode is being generated in the background. When it is ready, open it from the details"
+                  : 'Keep this screen open to follow along, or find it later in Past Episodes.'}
               </Text>
             </View>
           </View>
@@ -602,6 +695,67 @@ const styles = StyleSheet.create({
     backgroundColor: '#C2C7D0', marginHorizontal: 2,
   },
 
+  sourcesCard: {
+    marginHorizontal: 16,
+    marginBottom: 16,
+    padding: 14,
+    borderRadius: 14,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  sourcesHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 4,
+  },
+  sourcesHeaderText: {
+    flex: 1,
+  },
+  sourcesTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 2,
+  },
+  sourcesTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#111318',
+  },
+  sourcesSubtitle: {
+    fontSize: 12,
+    color: '#8A8F9A',
+    lineHeight: 17,
+  },
+  sourceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#EEF1F5',
+  },
+  sourceRowText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#0714B8',
+    lineHeight: 18,
+  },
+  sourceRowTextStatic: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#3D4048',
+    lineHeight: 18,
+  },
+
   processingCard: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
     marginHorizontal: 16, marginBottom: 16,
@@ -610,6 +764,7 @@ const styles = StyleSheet.create({
   },
   processingTitle: { fontWeight: '800', color: '#0714B8', marginBottom: 2, fontSize: 14 },
   processingDesc: { color: '#3D4048', fontSize: 12 },
+  processingHint: { color: '#8A8F9A', fontSize: 11, marginTop: 6, lineHeight: 16 },
 
   scriptPreviewCard: {
     marginHorizontal: 16,

@@ -1,4 +1,5 @@
 import { api } from '@/src/api/client';
+import { getCuratedDetail } from '@/src/data/curatedPodcasts';
 
 export type TranscriptSegment = {
   order: number;
@@ -122,13 +123,19 @@ export async function getListenNotesPodcastDetail(
   listenNotesPodcastId: string,
   episodeId?: string | null,
 ): Promise<PodcastDetail> {
-  const enc = encodeURIComponent(listenNotesPodcastId.trim());
-  const q =
-    episodeId && episodeId.trim().length > 0
-      ? `?episodeId=${encodeURIComponent(episodeId.trim())}`
-      : '';
-  const { data } = await api.get<PodcastDetail>(`/api/podcasts/listen-notes/${enc}${q}`);
-  return data;
+  const local = getCuratedDetail(listenNotesPodcastId);
+  try {
+    const enc = encodeURIComponent(listenNotesPodcastId.trim());
+    const q =
+      episodeId && episodeId.trim().length > 0
+        ? `?episodeId=${encodeURIComponent(episodeId.trim())}`
+        : '';
+    const { data } = await api.get<PodcastDetail>(`/api/podcasts/listen-notes/${enc}${q}`);
+    return data;
+  } catch {
+    if (local) return local;
+    throw new Error('Podcast detail unavailable.');
+  }
 }
 
 export async function getPodcasts(): Promise<PodcastSummary[]> {

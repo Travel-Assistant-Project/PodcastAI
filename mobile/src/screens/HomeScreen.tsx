@@ -107,7 +107,9 @@ function HeroEmpty() {
       <Text style={[styles.heroTime, { textAlign: 'center', marginTop: 6 }]}>
         Create your first AI podcast to get started.
       </Text>
-      <TouchableOpacity style={[styles.primaryBtn, { marginTop: 16 }]} onPress={() => router.push('/create')}>
+      <TouchableOpacity
+        style={styles.heroEmptyBtn}
+        onPress={() => router.push('/create')}>
         <Text style={styles.primaryBtnText}>＋ Create Podcast</Text>
       </TouchableOpacity>
     </View>
@@ -567,8 +569,17 @@ const styles = StyleSheet.create({
   },
   heroCardEmpty: {
     alignItems: 'center',
+    justifyContent: 'center',
     paddingVertical: 28,
     paddingHorizontal: 16,
+  },
+  heroEmptyBtn: {
+    marginTop: 16,
+    alignSelf: 'center',
+    backgroundColor: Colors.surface,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
   },
   heroBackdropImage: {
     ...StyleSheet.absoluteFillObject,

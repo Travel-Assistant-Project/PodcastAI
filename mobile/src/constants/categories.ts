@@ -33,7 +33,7 @@ const FAVORITE_CHIP_LABELS: Record<string, string> = {
 
 /** Archive chip → apiSlug (null = tümü). Discover ile aynı kategori seti. */
 export const FAVORITE_FILTERS = [
-  { label: 'ALL SAVED', slug: null as string | null },
+  { label: 'ALL\u00A0SAVED', slug: null as string | null },
   ...CATEGORY_OPTIONS.map((c) => ({
     label: FAVORITE_CHIP_LABELS[c.apiSlug] ?? c.label.toUpperCase(),
     slug: c.apiSlug,
