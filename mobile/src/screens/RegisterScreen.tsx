@@ -26,14 +26,28 @@ const RegisterScreen = () => {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
+  const [age, setAge] = useState('');
+  const [job, setJob] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const handleRegister = async () => {
-    if (!fullName.trim() || !email.trim() || !password.trim()) {
-      setErrorMessage('Full name, email, and password are required.');
+    if (!fullName.trim() || !email.trim() || !age.trim() || !job.trim() || !password.trim()) {
+      setErrorMessage('Full name, email, age, job, and password are required.');
+      return;
+    }
+
+    const parsedAge = Number.parseInt(age.trim(), 10);
+    if (!Number.isFinite(parsedAge) || parsedAge < 7 || parsedAge > 100) {
+      setErrorMessage('Age must be a number between 7 and 100.');
+      return;
+    }
+
+    const trimmedJob = job.trim();
+    if (trimmedJob.length > 100) {
+      setErrorMessage('Job cannot exceed 100 characters.');
       return;
     }
 
@@ -50,6 +64,8 @@ const RegisterScreen = () => {
         fullName: fullName.trim(),
         email: email.trim().toLowerCase(),
         password,
+        age: parsedAge,
+        job: trimmedJob,
       });
 
       setAuthToken(response.token);
@@ -110,6 +126,32 @@ const RegisterScreen = () => {
                   keyboardType="email-address"
                   value={email}
                   onChangeText={setEmail}
+                />
+              </View>
+
+              <Text style={styles.label}>AGE</Text>
+              <View style={styles.inputWrapper}>
+                <TextInput
+                  style={styles.input}
+                  placeholder="25"
+                  placeholderTextColor="#B6BAC2"
+                  keyboardType="number-pad"
+                  maxLength={3}
+                  value={age}
+                  onChangeText={setAge}
+                />
+              </View>
+
+              <Text style={styles.label}>JOB</Text>
+              <View style={styles.inputWrapper}>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Software Engineer"
+                  placeholderTextColor="#B6BAC2"
+                  autoCapitalize="words"
+                  maxLength={100}
+                  value={job}
+                  onChangeText={setJob}
                 />
               </View>
 
@@ -175,12 +217,6 @@ const RegisterScreen = () => {
             </View>
 
             <View style={styles.footerBlock}>
-              <Text style={styles.termsText}>
-                By signing up, you agree to our{' '}
-                <Text style={styles.linkText}>Terms and Conditions</Text> and{' '}
-                <Text style={styles.linkText}>Privacy Policy.</Text>
-              </Text>
-
               <View style={styles.memberDividerRow}>
                 <View style={styles.memberDivider} />
                 <Text style={styles.memberText}>ALREADY A MEMBER?</Text>
@@ -343,20 +379,6 @@ const styles = StyleSheet.create({
     color: '#B91C1C',
     fontSize: 12,
     fontWeight: '600',
-  },
-
-  termsText: {
-    textAlign: 'center',
-    fontSize: 12,
-    lineHeight: 16,
-    color: '#626778',
-    marginBottom: 14,
-    paddingHorizontal: 2,
-  },
-
-  linkText: {
-    color: '#002E83',
-    fontWeight: '700',
   },
 
   memberDividerRow: {

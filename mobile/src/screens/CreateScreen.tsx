@@ -11,6 +11,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useRouter } from 'expo-router';
 
+import ScreenHeader from '@/src/components/ScreenHeader';
 import { generatePodcast } from '@/src/api/podcasts.api';
 import { ensureNotificationPermissionsAsync } from '@/src/services/notifications';
 import { startWatchingPodcastCompletion } from '@/src/services/podcastCompletionWatcher';
@@ -100,15 +101,7 @@ export default function CreateScreen() {
 
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
-      {/* Header */}
-      <View style={styles.header}>
-            <View style={styles.headerLeft}>
-          <MaterialIcons name="auto-awesome" size={16} color="#8B8FFF" />
-          <Text style={styles.headerBrand}>PodcastAI</Text>
-          <View style={styles.headerDivider} />
-          <Text style={styles.headerPage}>Generate</Text>
-        </View>
-      </View>
+      <ScreenHeader pageTitle="Create" />
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         {/* Page Title */}
@@ -344,18 +337,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#F7F9FB',
   },
 
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-  },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
   headerIconBtn: {
     width: 36,
     height: 36,
@@ -363,12 +344,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#ECEEF2',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-
-  headerTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#002E83',
   },
 
   scrollContent: {

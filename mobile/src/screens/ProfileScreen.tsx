@@ -17,6 +17,7 @@ import * as ImagePicker from 'expo-image-picker';
 
 import { setAuthToken } from '@/src/api/client';
 import { getUser, setUser } from '@/src/store/authStore';
+import ScreenHeader, { HeaderProfileButton } from '@/src/components/ScreenHeader';
 import { getProfile, uploadProfilePhoto, type UserProfile } from '@/src/api/user.api';
 import { usePlayback } from '@/src/context/PlaybackContext';
 import { ensureNotificationPermissionsAsync } from '@/src/services/notifications';
@@ -122,17 +123,14 @@ export default function ProfileScreen() {
 
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>PodcastAI</Text>
-        <View style={styles.avatarSmall}>
-          {profile?.photoUrl ? (
-            <Image source={{ uri: profile.photoUrl }} style={styles.avatarSmallImg} />
-          ) : (
-            <DefaultAvatar size={36} />
-          )}
-        </View>
-      </View>
+      <ScreenHeader
+        pageTitle="Profile"
+        right={
+          <HeaderProfileButton
+            photoUrl={profile?.photoUrl?.trim() ? profile.photoUrl : null}
+          />
+        }
+      />
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
 
@@ -228,19 +226,6 @@ export default function ProfileScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Preferences</Text>
           <View style={styles.preferenceList}>
-            <TouchableOpacity style={styles.preferenceRow} activeOpacity={0.75}>
-              <View style={[styles.prefIconWrap, { backgroundColor: '#EEF1FF' }]}>
-                <MaterialIcons name="schedule" size={20} color="#0714B8" />
-              </View>
-              <View style={styles.prefContent}>
-                <Text style={styles.prefTitle}>Daily Podcast Time</Text>
-                <Text style={styles.prefSub}>Target: 45 mins / day</Text>
-              </View>
-              <MaterialIcons name="chevron-right" size={22} color="#C2C7D0" />
-            </TouchableOpacity>
-
-            <View style={styles.separator} />
-
             <View style={styles.preferenceRow}>
               <View style={[styles.prefIconWrap, { backgroundColor: '#F0F3FF' }]}>
                 <MaterialIcons name="notifications-none" size={20} color="#0714B8" />
@@ -312,34 +297,6 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: '#F7F9FB',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    backgroundColor: '#F7F9FB',
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#111318',
-    letterSpacing: 0.3,
-    textDecorationLine: 'underline',
-    textDecorationColor: '#D1D5DB',
-  },
-  avatarSmall: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    overflow: 'hidden',
-    borderWidth: 2,
-    borderColor: '#E2E8F0',
-  },
-  avatarSmallImg: {
-    width: '100%',
-    height: '100%',
   },
   scrollContent: {
     paddingHorizontal: 20,
