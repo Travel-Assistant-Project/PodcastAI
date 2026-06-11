@@ -217,12 +217,6 @@ const RegisterScreen = () => {
             </View>
 
             <View style={styles.footerBlock}>
-              <Text style={styles.termsText}>
-                By signing up, you agree to our{' '}
-                <Text style={styles.linkText}>Terms and Conditions</Text> and{' '}
-                <Text style={styles.linkText}>Privacy Policy.</Text>
-              </Text>
-
               <View style={styles.memberDividerRow}>
                 <View style={styles.memberDivider} />
                 <Text style={styles.memberText}>ALREADY A MEMBER?</Text>
@@ -385,20 +379,6 @@ const styles = StyleSheet.create({
     color: '#B91C1C',
     fontSize: 12,
     fontWeight: '600',
-  },
-
-  termsText: {
-    textAlign: 'center',
-    fontSize: 12,
-    lineHeight: 16,
-    color: '#626778',
-    marginBottom: 14,
-    paddingHorizontal: 2,
-  },
-
-  linkText: {
-    color: '#002E83',
-    fontWeight: '700',
   },
 
   memberDividerRow: {
