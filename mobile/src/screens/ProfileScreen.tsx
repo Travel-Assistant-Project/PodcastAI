@@ -226,19 +226,6 @@ export default function ProfileScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Preferences</Text>
           <View style={styles.preferenceList}>
-            <TouchableOpacity style={styles.preferenceRow} activeOpacity={0.75}>
-              <View style={[styles.prefIconWrap, { backgroundColor: '#EEF1FF' }]}>
-                <MaterialIcons name="schedule" size={20} color="#0714B8" />
-              </View>
-              <View style={styles.prefContent}>
-                <Text style={styles.prefTitle}>Daily Podcast Time</Text>
-                <Text style={styles.prefSub}>Target: 45 mins / day</Text>
-              </View>
-              <MaterialIcons name="chevron-right" size={22} color="#C2C7D0" />
-            </TouchableOpacity>
-
-            <View style={styles.separator} />
-
             <View style={styles.preferenceRow}>
               <View style={[styles.prefIconWrap, { backgroundColor: '#F0F3FF' }]}>
                 <MaterialIcons name="notifications-none" size={20} color="#0714B8" />
