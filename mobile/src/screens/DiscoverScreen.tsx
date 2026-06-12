@@ -14,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import PodcastCardFavorite from '@/src/components/PodcastCardFavorite';
+import ScreenHeader from '@/src/components/ScreenHeader';
 import { getTrendingPodcasts, type PodcastSummary } from '@/src/api/podcasts.api';
 import { CATEGORY_OPTIONS } from '@/src/constants/categories';
 import {
@@ -81,18 +82,7 @@ export default function DiscoverScreen() {
 
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <MaterialIcons name="auto-awesome" size={16} color="#8B8FFF" />
-          <Text style={styles.headerBrand}>PodcastAI</Text>
-          <View style={styles.headerDivider} />
-          <Text style={styles.headerPage}>Discover</Text>
-        </View>
-        {/* <TouchableOpacity style={styles.searchIconBtn}>
-          <MaterialIcons name="search" size={22} color="#5A5F6A" />
-        </TouchableOpacity> */}
-      </View>
+      <ScreenHeader pageTitle="Explore" />
 
       <ScrollView
         showsVerticalScrollIndicator={false}
@@ -231,38 +221,6 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: '#F7F9FB',
-  },
-
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-  },
-
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-
-  headerBrand: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#002E83',
-  },
-
-  headerDivider: {
-    width: 1,
-    height: 14,
-    backgroundColor: '#D6DAE6',
-  },
-
-  headerPage: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#8A8F9A',
   },
 
   searchIconBtn: {

@@ -21,6 +21,7 @@ import {
 import { getProfile } from '@/src/api/user.api';
 import type { PodcastSummary } from '@/src/api/podcasts.api';
 import PodcastCardFavorite from '@/src/components/PodcastCardFavorite';
+import ScreenHeader, { HeaderProfileButton } from '@/src/components/ScreenHeader';
 import { FAVORITE_FILTERS } from '@/src/constants/categories';
 import { useFavorites } from '@/src/context/FavoritesContext';
 import {
@@ -105,25 +106,15 @@ export default function FavoritesScreen() {
 
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
-      <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <MaterialIcons name="auto-awesome" size={16} color="#8B8FFF" />
-          <Text style={styles.headerBrand}>PodcastAI</Text>
-          <View style={styles.headerDivider} />
-          <Text style={styles.headerPage}>Favorites</Text>
-        </View>
-        <TouchableOpacity
-          style={styles.headerSide}
-          activeOpacity={0.85}
-          onPress={() => router.push('/(tabs)/profile')}
-          accessibilityLabel="Profile">
-          {profilePhotoUrl ? (
-            <Image source={{ uri: profilePhotoUrl }} style={styles.headerAvatarImg} />
-          ) : (
-            <View style={styles.avatarDot} />
-          )}
-        </TouchableOpacity>
-      </View>
+      <ScreenHeader
+        pageTitle="Favorites"
+        right={
+          <HeaderProfileButton
+            photoUrl={profilePhotoUrl}
+            onPress={() => router.push('/(tabs)/profile')}
+          />
+        }
+      />
 
       <View style={styles.filtersWrap}>
         <ScrollView
@@ -218,71 +209,6 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: '#F7F9FB',
-  },
-
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-  },
-
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-
-  headerBrand: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#002E83',
-  },
-
-  headerDivider: {
-    width: 1,
-    height: 14,
-    backgroundColor: '#D6DAE6',
-  },
-
-  headerPage: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#8A8F9A',
-  },
-
-  headerSide: {
-    width: 34,
-    height: 34,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  headerTitle: {
-    flex: 1,
-    fontSize: 17,
-    fontWeight: '700',
-    color: '#111318',
-    textAlign: 'center',
-  },
-
-  headerAvatarImg: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: '#E2E8F0',
-    borderWidth: 2,
-    borderColor: '#E2E8F0',
-  },
-
-  avatarDot: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: '#0F172A',
-    borderWidth: 2,
-    borderColor: '#E2E8F0',
   },
 
   filtersWrap: {

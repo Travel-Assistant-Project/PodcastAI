@@ -22,13 +22,13 @@ public class AuthController(
             || string.IsNullOrWhiteSpace(registerDto.Email)
             || string.IsNullOrWhiteSpace(registerDto.Password))
         {
-            return BadRequest(new { message = "FullName, Email ve Password zorunludur." });
+            return BadRequest(new { message = "Full name, email, and password are required." });
         }
 
         var email = registerDto.Email.Trim().ToLowerInvariant();
         if (await db.Users.AnyAsync(u => u.Email == email))
         {
-            return Conflict(new { message = "Bu e-posta adresi zaten kayıtlı." });
+            return Conflict(new { message = "This email is already registered." });
         }
 
         var user = new User
@@ -62,14 +62,14 @@ public class AuthController(
     {
         if (string.IsNullOrWhiteSpace(loginDto.Email) || string.IsNullOrWhiteSpace(loginDto.Password))
         {
-            return BadRequest(new { message = "Email ve Password zorunludur." });
+            return BadRequest(new { message = "Email and password are required." });
         }
 
         var email = loginDto.Email.Trim().ToLowerInvariant();
         var user = await db.Users.FirstOrDefaultAsync(u => u.Email == email);
         if (user is null || !passwordHasher.Verify(user, loginDto.Password))
         {
-            return Unauthorized(new { message = "E-posta veya şifre hatalı." });
+            return Unauthorized(new { message = "Incorrect email or password." });
         }
 
         var token = tokenService.CreateToken(user);

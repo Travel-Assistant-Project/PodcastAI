@@ -21,6 +21,7 @@ import {
 } from '@/src/api/podcasts.api';
 import { Colors } from '@/src/styles/colors';
 import PodcastCardFavorite from '@/src/components/PodcastCardFavorite';
+import ScreenHeader, { HeaderProfileButton } from '@/src/components/ScreenHeader';
 import RecentlyPlayedList from '@/src/components/RecentlyPlayedList';
 import { getUser } from '@/src/store/authStore';
 import { getProfile } from '@/src/api/user.api';
@@ -347,24 +348,16 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
+      <ScreenHeader
+        pageTitle="Home"
+        right={
+          <HeaderProfileButton
+            photoUrl={profilePhotoUrl}
+            onPress={() => router.push('/(tabs)/profile')}
+          />
+        }
+      />
       <ScrollView contentContainerStyle={styles.content}>
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={styles.brand}>PodcastAI</Text>
-          <View style={styles.headerActions}>
-            <TouchableOpacity
-              activeOpacity={0.85}
-              onPress={() => router.push('/(tabs)/profile')}
-              accessibilityLabel="Profile">
-              {profilePhotoUrl ? (
-                <Image source={{ uri: profilePhotoUrl }} style={styles.headerAvatarImg} />
-              ) : (
-                <View style={styles.avatarDot} />
-              )}
-            </TouchableOpacity>
-          </View>
-        </View>
-
         <Text style={styles.greeting}>Hello, {displayName}!</Text>
         <Text style={styles.subtitle}>Your AI Curator has new insights for you today.</Text>
 
@@ -498,47 +491,20 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 16,
-    paddingTop: 8,
+    paddingTop: 0,
     paddingBottom: 28,
     gap: 14,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  brand: {
-    color: '#0B286E',
-    fontSize: 17,
-    fontWeight: '800',
-  },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
   },
   iconText: {
     color: Colors.text,
     fontSize: 18,
-  },
-  avatarDot: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: '#0F172A',
-  },
-  headerAvatarImg: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: '#E2E8F0',
   },
   greeting: {
     fontSize: 34,
     lineHeight: 38,
     fontWeight: '800',
     color: Colors.text,
-    marginTop: 10,
+    marginTop: 4,
   },
   subtitle: {
     color: Colors.textMuted,
