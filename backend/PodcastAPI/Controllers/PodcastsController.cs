@@ -372,6 +372,59 @@ public class PodcastsController(
         return Ok(history);
     }
 
+    [HttpGet("category-stats")]
+    public async Task<ActionResult<CategoryStatsDto>> GetCategoryStats(
+        [FromQuery] string category,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var userId))
+            return Unauthorized(new { message = "Invalid token." });
+
+        if (string.IsNullOrWhiteSpace(category))
+            return BadRequest(new { message = "category is required." });
+
+        var internalFavorites = await db.Favorites
+            .AsNoTracking()
+            .Where(f => f.UserId == userId)
+            .Include(f => f.Podcast)
+            .ToListAsync(cancellationToken);
+
+        var externalFavorites = await db.ExternalFavorites
+            .AsNoTracking()
+            .Where(f => f.UserId == userId)
+            .ToListAsync(cancellationToken);
+
+        var favoritesCount = internalFavorites.Count(f =>
+                CategoryMatchHelper.MatchesCategoryBlob(f.Podcast.CategoryName, category))
+            + externalFavorites.Count(f =>
+                CategoryMatchHelper.MatchesCategoryBlob(f.CategoryBlob, category));
+
+        var internalHistory = await db.ListeningHistories
+            .AsNoTracking()
+            .Where(h => h.UserId == userId)
+            .Include(h => h.Podcast)
+            .ToListAsync(cancellationToken);
+
+        var externalHistory = await db.ExternalListeningHistories
+            .AsNoTracking()
+            .Where(h => h.UserId == userId)
+            .ToListAsync(cancellationToken);
+
+        var totalListenSeconds = internalHistory
+            .Where(h => CategoryMatchHelper.MatchesCategoryBlob(h.Podcast.CategoryName, category))
+            .Sum(h => (long)h.ProgressSeconds);
+
+        totalListenSeconds += externalHistory
+            .Where(h => CategoryMatchHelper.MatchesCategoryBlob(h.CategoryBlob, category))
+            .Sum(h => (long)h.ProgressSeconds);
+
+        return Ok(new CategoryStatsDto
+        {
+            FavoritesCount = favoritesCount,
+            TotalListenSeconds = totalListenSeconds,
+        });
+    }
+
     [HttpGet("external/trending")]
     public async Task<ActionResult<List<PodcastSummaryDto>>> GetExternalTrending([FromQuery] string? genreId)
     {

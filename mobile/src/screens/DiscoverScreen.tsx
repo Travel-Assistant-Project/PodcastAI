@@ -12,18 +12,34 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import PodcastCardFavorite from '@/src/components/PodcastCardFavorite';
 import ScreenHeader from '@/src/components/ScreenHeader';
-import { getTrendingPodcasts, type PodcastSummary } from '@/src/api/podcasts.api';
-import { CATEGORY_OPTIONS } from '@/src/constants/categories';
+import { getFavorites } from '@/src/api/favorites.api';
+import {
+  getExternalTrending,
+  getTrendingPodcasts,
+  type PodcastSummary,
+} from '@/src/api/podcasts.api';
+import { CATEGORY_OPTIONS, getCategoryOption } from '@/src/constants/categories';
 import {
   categoryTag,
   formatDurationMinutes,
+  getTopFavoriteCategoryLabel,
   openPodcastSummary,
 } from '@/src/utils/podcastNavigation';
 
 const { width } = Dimensions.get('window');
+const FALLBACK_COVER =
+  'https://images.unsplash.com/photo-1478737270239-2f02b77fc618?q=80&w=400&auto=format&fit=crop';
+const DEFAULT_PICKS_CATEGORY = 'Technology';
+
+function favoriteKey(item: PodcastSummary): string {
+  const ln = item.listenNotesPodcastId?.trim().toLowerCase();
+  if (ln) return `ln:${ln}`;
+  return `id:${item.id.trim().toLowerCase()}`;
+}
 
 const CATEGORY_ICONS: Record<string, string> = {
   technology: 'computer',
@@ -49,6 +65,9 @@ export default function DiscoverScreen() {
   const [search, setSearch] = useState('');
   const [trending, setTrending] = useState<PodcastSummary[]>([]);
   const [loading, setLoading] = useState(true);
+  const [picks, setPicks] = useState<PodcastSummary[]>([]);
+  const [picksCategory, setPicksCategory] = useState<string | null>(null);
+  const [picksLoading, setPicksLoading] = useState(true);
 
   const loadTrending = useCallback(async () => {
     setLoading(true);
@@ -62,9 +81,38 @@ export default function DiscoverScreen() {
     }
   }, []);
 
+  const loadPicks = useCallback(async () => {
+    setPicksLoading(true);
+    try {
+      const favorites = await getFavorites();
+      const topCategory = getTopFavoriteCategoryLabel(favorites) ?? DEFAULT_PICKS_CATEGORY;
+      const option = getCategoryOption(topCategory);
+      const favoritedKeys = new Set(favorites.map(favoriteKey));
+
+      const categoryPodcasts = await getExternalTrending(option?.listenNotesGenreId ?? null);
+      const selected = categoryPodcasts
+        .filter((item) => !favoritedKeys.has(favoriteKey(item)))
+        .slice(0, 2);
+
+      setPicks(selected);
+      setPicksCategory(topCategory);
+    } catch {
+      setPicks([]);
+      setPicksCategory(null);
+    } finally {
+      setPicksLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     loadTrending();
   }, [loadTrending]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadPicks();
+    }, [loadPicks]),
+  );
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -78,7 +126,10 @@ export default function DiscoverScreen() {
   }, [search, trending]);
 
   const trendingEpisodes = filtered.slice(0, 7);
-  const archivePicks = filtered.slice(7, 9);
+
+  const picksSubtitle = picksCategory
+    ? `Top picks from ${picksCategory} based on your favorites`
+    : 'Save favorites to personalize your picks';
 
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
@@ -181,35 +232,43 @@ export default function DiscoverScreen() {
         {/* PodcastAI Picks */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>PodcastAI Picks</Text>
-          <Text style={styles.sectionSub}>Expertly documented research streams</Text>
+          <Text style={styles.sectionSub}>{picksSubtitle}</Text>
 
-          {!loading &&
-            archivePicks.map((item) => {
-              return (
-                <TouchableOpacity
-                  key={item.id}
-                  style={styles.archiveRow}
-                  activeOpacity={0.85}
-                  onPress={() => openPodcastSummary(router, item)}>
-                  <Image
-                    source={{
-                      uri:
-                        item.coverImageUrl?.trim() ||
-                        'https://images.unsplash.com/photo-1478737270239-2f02b77fc618?q=80&w=400&auto=format&fit=crop',
-                    }}
-                    style={styles.archiveThumb}
-                  />
-                  <View style={styles.archiveInfo}>
-                    <Text style={styles.archiveTag}>{categoryTag(item)}</Text>
-                    <Text style={styles.archiveTitle}>{item.title ?? 'Untitled'}</Text>
-                    <Text style={styles.archiveSub} numberOfLines={1}>
-                      {item.publisher?.trim() || formatDurationMinutes(item.durationSeconds)}
-                    </Text>
-                  </View>
-                  <PodcastCardFavorite item={item} size={18} />
-                </TouchableOpacity>
-              );
-            })}
+          {picksLoading && (
+            <View style={styles.loaderWrap}>
+              <ActivityIndicator color="#0714B8" />
+            </View>
+          )}
+
+          {!picksLoading && picks.length === 0 && (
+            <Text style={styles.emptyHint}>No picks available in this category right now.</Text>
+          )}
+
+          {!picksLoading &&
+            picks.map((item) => (
+              <TouchableOpacity
+                key={item.id}
+                style={styles.archiveRow}
+                activeOpacity={0.85}
+                onPress={() => openPodcastSummary(router, item)}>
+                <Image
+                  source={{ uri: item.coverImageUrl?.trim() || FALLBACK_COVER }}
+                  style={styles.archiveThumb}
+                />
+                <View style={styles.archiveInfo}>
+                  <Text style={styles.archiveTag}>{categoryTag(item)}</Text>
+                  <Text style={styles.archiveTitle}>{item.title ?? 'Untitled'}</Text>
+                  <Text style={styles.archiveSub} numberOfLines={1}>
+                    {item.publisher?.trim() || formatDurationMinutes(item.durationSeconds)}
+                  </Text>
+                </View>
+                <PodcastCardFavorite
+                  item={item}
+                  browseCategoryLabel={picksCategory ?? undefined}
+                  size={18}
+                />
+              </TouchableOpacity>
+            ))}
         </View>
 
       </ScrollView>

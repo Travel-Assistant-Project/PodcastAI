@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   View,
   Text,
@@ -11,13 +11,15 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import PodcastCardFavorite from '@/src/components/PodcastCardFavorite';
-import { getExternalTrending, type PodcastSummary } from '@/src/api/podcasts.api';
+import { getExternalTrending, getCategoryStats, getPodcasts, type PodcastSummary } from '@/src/api/podcasts.api';
 import { getCategoryOption } from '@/src/constants/categories';
 import {
   categoryTag,
   formatDurationMinutes,
+  matchesCategoryFilter,
   openPodcastSummary,
 } from '@/src/utils/podcastNavigation';
 
@@ -113,6 +115,44 @@ const CATEGORY_META: Record<string, { color: string; icon: string; description: 
 const FALLBACK_COVER =
   'https://images.unsplash.com/photo-1478737270239-2f02b77fc618?q=80&w=800&auto=format&fit=crop';
 
+function formatTotalListenTime(seconds: number): string {
+  if (seconds <= 0) return '0m';
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.round((seconds % 3600) / 60);
+  if (hours > 0 && minutes > 0) return `${hours}h ${minutes}m`;
+  if (hours > 0) return `${hours}h`;
+  return `${Math.max(1, minutes)}m`;
+}
+
+function isOwnCompletedPodcast(item: PodcastSummary): boolean {
+  const status = item.status?.trim().toLowerCase();
+  return status === 'completed' && !item.listenNotesPodcastId?.trim();
+}
+
+function mergeLatestEpisodes(own: PodcastSummary[], external: PodcastSummary[]): PodcastSummary[] {
+  const ownIds = new Set(own.map((p) => p.id.trim().toLowerCase()));
+  const filteredExternal = external.filter(
+    (item) => !ownIds.has(item.id.trim().toLowerCase()),
+  );
+
+  const merged: PodcastSummary[] = [];
+  let ownIdx = 0;
+  let externalIdx = 0;
+
+  while (ownIdx < own.length || externalIdx < filteredExternal.length) {
+    if (externalIdx < filteredExternal.length) {
+      merged.push(filteredExternal[externalIdx]);
+      externalIdx += 1;
+    }
+    if (ownIdx < own.length) {
+      merged.push(own[ownIdx]);
+      ownIdx += 1;
+    }
+  }
+
+  return merged;
+}
+
 export default function CategoryScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -120,25 +160,54 @@ export default function CategoryScreen() {
   const categoryOption = getCategoryOption(category);
   const meta = CATEGORY_META[category] ?? CATEGORY_META.Technology;
   const genreId = categoryOption?.listenNotesGenreId ?? null;
+  const apiSlug = categoryOption?.apiSlug ?? category.trim().toLowerCase();
 
   const [categoryItems, setCategoryItems] = useState<PodcastSummary[]>([]);
+  const [latestEpisodes, setLatestEpisodes] = useState<PodcastSummary[]>([]);
   const [loading, setLoading] = useState(true);
+  const [favoritesCount, setFavoritesCount] = useState(0);
+  const [totalListenSeconds, setTotalListenSeconds] = useState(0);
+  const [statsLoading, setStatsLoading] = useState(true);
 
   const load = useCallback(async () => {
     setLoading(true);
+    setStatsLoading(true);
     try {
-      const data = await getExternalTrending(genreId);
-      setCategoryItems(data);
+      const [external, ownAll, stats] = await Promise.all([
+        getExternalTrending(genreId),
+        getPodcasts().catch(() => [] as PodcastSummary[]),
+        getCategoryStats(category),
+      ]);
+
+      const ownInCategory = ownAll
+        .filter(
+          (item) =>
+            isOwnCompletedPodcast(item) && matchesCategoryFilter(item, category, apiSlug),
+        )
+        .sort(
+          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+        );
+
+      setCategoryItems(external);
+      setLatestEpisodes(mergeLatestEpisodes(ownInCategory, external));
+      setFavoritesCount(stats.favoritesCount);
+      setTotalListenSeconds(stats.totalListenSeconds);
     } catch {
       setCategoryItems([]);
+      setLatestEpisodes([]);
+      setFavoritesCount(0);
+      setTotalListenSeconds(0);
     } finally {
       setLoading(false);
+      setStatsLoading(false);
     }
-  }, [genreId]);
+  }, [genreId, category, apiSlug]);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  useFocusEffect(
+    useCallback(() => {
+      void load();
+    }, [load]),
+  );
 
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
@@ -161,18 +230,24 @@ export default function CategoryScreen() {
           <Text style={styles.heroDesc}>{meta.description}</Text>
           <View style={styles.heroStats}>
             <View style={styles.heroStat}>
-              <Text style={styles.heroStatValue}>{loading ? '—' : String(categoryItems.length)}</Text>
+              <Text style={styles.heroStatValue}>
+                {loading ? '—' : String(latestEpisodes.length)}
+              </Text>
               <Text style={styles.heroStatLabel}>Shows</Text>
             </View>
             <View style={styles.heroStatDivider} />
             <View style={styles.heroStat}>
-              <Text style={styles.heroStatValue}>180</Text>
-              <Text style={styles.heroStatLabel}>Curators</Text>
+              <Text style={styles.heroStatValue}>
+                {statsLoading ? '—' : String(favoritesCount)}
+              </Text>
+              <Text style={styles.heroStatLabel}>Favorites</Text>
             </View>
             <View style={styles.heroStatDivider} />
             <View style={styles.heroStat}>
-              <Text style={styles.heroStatValue}>94K</Text>
-              <Text style={styles.heroStatLabel}>Listeners</Text>
+              <Text style={styles.heroStatValue}>
+                {statsLoading ? '—' : formatTotalListenTime(totalListenSeconds)}
+              </Text>
+              <Text style={styles.heroStatLabel}>Listen Time</Text>
             </View>
           </View>
         </View>
@@ -237,7 +312,7 @@ export default function CategoryScreen() {
           </View>
 
           {!loading &&
-            categoryItems.map((ep) => {
+            latestEpisodes.map((ep) => {
               return (
                 <TouchableOpacity
                   key={ep.id}
@@ -267,7 +342,7 @@ export default function CategoryScreen() {
                 </TouchableOpacity>
               );
             })}
-          {!loading && categoryItems.length === 0 && (
+          {!loading && latestEpisodes.length === 0 && (
             <Text style={styles.emptyHint}>No shows in this category right now.</Text>
           )}
         </View>
@@ -586,63 +661,5 @@ const styles = StyleSheet.create({
     borderRadius: 17,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-
-  /* Curators */
-  curatorRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 14,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#E8EBF2',
-  },
-
-  curatorAvatar: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    marginRight: 14,
-  },
-
-  curatorInfo: {
-    flex: 1,
-  },
-
-  curatorName: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#111318',
-    marginBottom: 2,
-  },
-
-  curatorSpecialty: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#8A8F9A',
-    letterSpacing: 1.2,
-    marginBottom: 3,
-  },
-
-  curatorFollowers: {
-    fontSize: 12,
-    color: '#8A8F9A',
-  },
-
-  followBtn: {
-    paddingHorizontal: 18,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1.5,
-    borderColor: '#D0D4E0',
-    backgroundColor: '#FFFFFF',
-  },
-
-  followBtnText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#111318',
   },
 });
