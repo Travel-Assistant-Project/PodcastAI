@@ -23,7 +23,7 @@ export function HeaderProfileButton({
   onPress?: () => void;
 }) {
   const content = photoUrl ? (
-    <Image source={{ uri: photoUrl }} style={styles.headerAvatarImg} />
+    <Image key={photoUrl} source={{ uri: photoUrl }} style={styles.headerAvatarImg} />
   ) : (
     <View style={styles.avatarDot} />
   );

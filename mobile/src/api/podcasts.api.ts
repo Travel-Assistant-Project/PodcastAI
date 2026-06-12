@@ -68,6 +68,8 @@ export type GeneratePodcastRequest = {
   speakerCount: number;
   learningMode?: boolean;
   cefrLevel?: string | null;
+  /** true ise günlük cache atlanır ve yeni bölüm üretilir */
+  forceRecreate?: boolean;
 };
 
 export type GeneratePodcastResponse = {
@@ -178,6 +180,18 @@ export async function recordListenNotesPlay(payload: ListenNotesPlayPayload): Pr
     coverImageUrl: payload.coverImageUrl ?? undefined,
     categories: payload.categories ?? undefined,
   });
+}
+
+export type CategoryStats = {
+  favoritesCount: number;
+  totalListenSeconds: number;
+};
+
+export async function getCategoryStats(category: string): Promise<CategoryStats> {
+  const { data } = await api.get<CategoryStats>('/api/podcasts/category-stats', {
+    params: { category },
+  });
+  return data;
 }
 
 export async function getRecentlyPlayed(): Promise<RecentlyPlayed[]> {

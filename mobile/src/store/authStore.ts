@@ -19,6 +19,15 @@ export function getUser(): AuthUser | null {
   return _user;
 }
 
+export function updateUserProfile(prefs: { fullName?: string; email?: string }) {
+  if (_user == null) return;
+  _user = {
+    ..._user,
+    ...(prefs.fullName !== undefined ? { fullName: prefs.fullName } : {}),
+    ...(prefs.email !== undefined ? { email: prefs.email } : {}),
+  };
+}
+
 // Onboarding sonrası mod ve seviyeyi günceller (oturum içi).
 export function updateLearningPrefs(prefs: {
   preferredMode?: 'listen' | 'learn' | null;

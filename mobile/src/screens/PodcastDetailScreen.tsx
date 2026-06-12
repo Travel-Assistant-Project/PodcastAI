@@ -15,12 +15,15 @@ import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { openBrowserAsync, WebBrowserPresentationStyle } from 'expo-web-browser';
 
 import {
+  generatePodcast,
   getListenNotesPodcastDetail,
   getPodcastById,
   type PodcastDetail,
   type PodcastSource,
   type TranscriptSegment,
 } from '@/src/api/podcasts.api';
+import { startWatchingPodcastCompletion } from '@/src/services/podcastCompletionWatcher';
+import { openPlayerForEpisode } from '@/src/utils/podcastNavigation';
 import TranscriptLine from '@/src/components/TranscriptLine';
 import WordLookupModal from '@/src/components/WordLookupModal';
 import { usePlayback } from '@/src/context/PlaybackContext';
@@ -53,6 +56,16 @@ async function openSourceUrl(url: string) {
   } catch {
     Alert.alert('Could not open link', 'Try again in a moment.');
   }
+}
+
+const ALLOWED_DURATION_MINUTES = [2, 5, 10] as const;
+
+function durationMinutesFromSeconds(seconds?: number | null): number {
+  if (!seconds || seconds <= 0) return 5;
+  const minutes = Math.round(seconds / 60);
+  return ALLOWED_DURATION_MINUTES.reduce((best, cur) =>
+    Math.abs(cur - minutes) < Math.abs(best - minutes) ? cur : best,
+  );
 }
 
 export default function PodcastDetailScreen() {
@@ -89,14 +102,7 @@ export default function PodcastDetailScreen() {
     sentence: string;
   } | null>(null);
 
-  const [refreshing, setRefreshing] = useState(false);
-
-  const fetchOnce = useCallback(async () => {
-    if (listenNotesPodcastId)
-      return getListenNotesPodcastDetail(listenNotesPodcastId, listenNotesEpisodeId);
-    if (podcastId) return getPodcastById(podcastId);
-    return null;
-  }, [listenNotesPodcastId, podcastId, listenNotesEpisodeId]);
+  const [recreating, setRecreating] = useState(false);
 
   // Podcast'i çek; processing ise polling (yalnızca kendi AI bölümleri).
   useEffect(() => {
@@ -148,21 +154,49 @@ export default function PodcastDetailScreen() {
     setShowSources(false);
   }, [routeEpisodeKey]);
 
-  const handleManualRefresh = useCallback(async () => {
-    if (refreshing) return;
-    try {
-      setRefreshing(true);
-      const data = await fetchOnce();
-      if (data) {
-        setPodcast(data);
-        setError(null);
-      }
-    } catch (e: any) {
-      setError(e?.response?.data?.message ?? 'Could not refresh podcast.');
-    } finally {
-      setRefreshing(false);
-    }
-  }, [fetchOnce, refreshing]);
+  const handleRecreate = useCallback(() => {
+    if (!podcast || listenNotesPodcastId || recreating) return;
+
+    Alert.alert(
+      'Recreate episode?',
+      'We will generate a fresh episode with the same settings. This bypasses today’s cached version.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Recreate',
+          style: 'default',
+          onPress: () => {
+            void (async () => {
+              setRecreating(true);
+              try {
+                const categories = (podcast.categories ?? [])
+                  .map((c) => c.trim().toLowerCase())
+                  .filter(Boolean);
+                const resp = await generatePodcast({
+                  categories,
+                  tone: podcast.tone?.trim().toLowerCase() || 'formal',
+                  durationMinutes: durationMinutesFromSeconds(podcast.durationSeconds),
+                  speakerCount: podcast.speakerCount,
+                  learningMode: podcast.learningMode,
+                  cefrLevel: podcast.learningMode ? podcast.cefrLevel ?? null : null,
+                  forceRecreate: true,
+                });
+                startWatchingPodcastCompletion(resp.podcastId);
+                router.replace({ pathname: '/podcast', params: { id: resp.podcastId } });
+              } catch (e: any) {
+                Alert.alert(
+                  'Could not recreate',
+                  e?.response?.data?.message ?? 'Try again in a moment.',
+                );
+              } finally {
+                setRecreating(false);
+              }
+            })();
+          },
+        },
+      ],
+    );
+  }, [listenNotesPodcastId, podcast, recreating, router]);
 
   // currentMs değiştikçe aktif satırı güncelle.
   useEffect(() => {
@@ -266,16 +300,6 @@ export default function PodcastDetailScreen() {
           {podcast.title || 'Podcast'}
         </Text>
         <View style={styles.headerRight}>
-          <TouchableOpacity
-            style={styles.refreshBtn}
-            onPress={handleManualRefresh}
-            disabled={refreshing}>
-            {refreshing ? (
-              <ActivityIndicator size="small" color="#0714B8" />
-            ) : (
-              <MaterialIcons name="refresh" size={20} color="#0714B8" />
-            )}
-          </TouchableOpacity>
           {isLearning && (
             <View style={styles.cefrBadge}>
               <Text style={styles.cefrBadgeText}>{podcast.cefrLevel}</Text>
@@ -298,19 +322,37 @@ export default function PodcastDetailScreen() {
         </View>
 
         <View style={styles.tagsRow}>
-          {(podcast.categories ?? [])
-            .filter((tag) => tag.trim().toLowerCase() !== 'podcast')
-            .slice(0, 4)
-            .map((tag) => (
-            <View key={tag} style={styles.tag}>
-              <Text style={styles.tagText}>{tag.toUpperCase()}</Text>
-            </View>
-          ))}
-          {isLearning && (
-            <View style={[styles.tag, styles.tagAccent]}>
-              <MaterialIcons name="school" size={11} color="#0714B8" style={{ marginRight: 3 }} />
-              <Text style={[styles.tagText, styles.tagTextAccent]}>LEARN MODE</Text>
-            </View>
+          <View style={styles.tagsLeft}>
+            {(podcast.categories ?? [])
+              .filter((tag) => tag.trim().toLowerCase() !== 'podcast')
+              .slice(0, 4)
+              .map((tag) => (
+                <View key={tag} style={styles.tag}>
+                  <Text style={styles.tagText}>{tag.toUpperCase()}</Text>
+                </View>
+              ))}
+            {isLearning && (
+              <View style={[styles.tag, styles.tagAccent]}>
+                <MaterialIcons name="school" size={11} color="#0714B8" style={{ marginRight: 3 }} />
+                <Text style={[styles.tagText, styles.tagTextAccent]}>LEARN MODE</Text>
+              </View>
+            )}
+          </View>
+          {!listenNotesPodcastId && (
+            <TouchableOpacity
+              style={[styles.recreateBtn, recreating && styles.recreateBtnDisabled]}
+              onPress={handleRecreate}
+              disabled={recreating || isProcessing}
+              activeOpacity={0.8}>
+              {recreating ? (
+                <ActivityIndicator size="small" color="#0714B8" />
+              ) : (
+                <>
+                  <MaterialIcons name="refresh" size={13} color="#0714B8" style={{ marginRight: 4 }} />
+                  <Text style={styles.recreateBtnText}>Recreate</Text>
+                </>
+              )}
+            </TouchableOpacity>
           )}
         </View>
 
@@ -335,7 +377,7 @@ export default function PodcastDetailScreen() {
           </Text>
         </View>
 
-        {displaySources.length > 0 && (
+        {!listenNotesPodcastId && displaySources.length > 0 && (
           <View style={styles.sourcesCard}>
             <TouchableOpacity
               style={styles.sourcesHeader}
@@ -429,8 +471,9 @@ export default function PodcastDetailScreen() {
           <View style={styles.audioFirstHint}>
             <MaterialIcons name="play-circle-outline" size={20} color="#0714B8" />
             <Text style={styles.audioFirstHintText}>
-              Use Listen below for the full player. Transcript below is expanded by default — tap the
-              header to collapse or expand while you read along.
+              {listenNotesPodcastId
+                ? 'Use Listen below for the full player. Resources below lists episode links and notes.'
+                : 'Use Listen below for the full player. Transcript below is expanded by default — tap the header to collapse or expand while you read along.'}
             </Text>
           </View>
         )}
@@ -448,94 +491,159 @@ export default function PodcastDetailScreen() {
           </View>
         )}
 
-        {/* Transcript — ses hazır olduktan sonra açılabilir */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <TouchableOpacity
-              style={[styles.sectionTitleRow, !canUseTranscript && styles.sectionTitleRowDisabled]}
-              onPress={() => {
-                if (!canUseTranscript) {
-                  Alert.alert(
-                    'Audio not ready yet',
-                    'Open the transcript after the episode audio is available. Pull to refresh or tap refresh in a few seconds.',
-                  );
-                  return;
-                }
-                setShowTranscript((v) => !v);
-              }}
-              activeOpacity={0.7}>
-              <MaterialIcons
-                name={showTranscript ? 'expand-less' : 'expand-more'}
-                size={20}
-                color={canUseTranscript ? '#111318' : '#C2C7D0'}
-              />
-              <View>
-                <Text
-                  style={[
-                    styles.sectionTitle,
-                    !canUseTranscript && styles.sectionTitleDisabled,
-                  ]}>
-                  Transcript
-                </Text>
-                {!canUseTranscript && !isFailed && (
-                  <Text style={styles.sectionSubtitle}>
-                    {hasScriptPreview && !audioReady
-                      ? 'Timed lines unlock when audio finishes'
-                      : 'Unlocks when audio is ready'}
-                  </Text>
-                )}
-                {canUseTranscript && !showTranscript && transcript.length > 0 && (
-                  <Text style={styles.sectionSubtitle}>
-                    {transcript.length} lines — tap to expand
-                  </Text>
-                )}
-              </View>
-            </TouchableOpacity>
-
-            {trAvailable && canUseTranscript && showTranscript && (
+        {listenNotesPodcastId ? (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
               <TouchableOpacity
-                style={[styles.allTrBtn, showAllTr && styles.allTrBtnActive]}
-                onPress={handleToggleAllTr}>
+                style={styles.sectionTitleRow}
+                onPress={() => setShowTranscript((v) => !v)}
+                activeOpacity={0.7}>
                 <MaterialIcons
-                  name="translate"
-                  size={13}
-                  color={showAllTr ? '#FFFFFF' : '#0714B8'}
-                  style={{ marginRight: 4 }}
+                  name={showTranscript ? 'expand-less' : 'expand-more'}
+                  size={20}
+                  color="#111318"
                 />
-                <Text
-                  style={[styles.allTrText, showAllTr && styles.allTrTextActive]}>
-                  Show Turkish
-                </Text>
+                <View>
+                  <Text style={styles.sectionTitle}>Resources</Text>
+                  {!showTranscript && (
+                    <Text style={styles.sectionSubtitle}>
+                      {displaySources.length > 0
+                        ? `${displaySources.length} link${displaySources.length === 1 ? '' : 's'} — tap to expand`
+                        : 'Episode notes — tap to expand'}
+                    </Text>
+                  )}
+                </View>
               </TouchableOpacity>
+            </View>
+
+            {showTranscript && (
+              <>
+                {displaySources.map((source, index) => {
+                  const url = source.newsUrl?.trim() ?? '';
+                  const label = sourceLabel(source);
+                  const key = url || `${source.sourceName ?? ''}-${source.newsTitle ?? ''}-${index}`;
+
+                  if (url) {
+                    return (
+                      <TouchableOpacity
+                        key={key}
+                        style={styles.resourceRow}
+                        onPress={() => void openSourceUrl(url)}
+                        activeOpacity={0.7}>
+                        <MaterialIcons name="link" size={16} color="#0714B8" />
+                        <Text style={styles.resourceRowText} numberOfLines={3}>
+                          {label}
+                        </Text>
+                        <MaterialIcons name="open-in-new" size={16} color="#0714B8" />
+                      </TouchableOpacity>
+                    );
+                  }
+
+                  return (
+                    <View key={key} style={styles.resourceRow}>
+                      <MaterialIcons name="article" size={16} color="#5A5F6A" />
+                      <Text style={styles.resourceRowTextStatic} numberOfLines={3}>
+                        {label}
+                      </Text>
+                    </View>
+                  );
+                })}
+
+                {displaySources.length === 0 && (
+                  <Text style={styles.emptyTranscript}>No resources for this episode.</Text>
+                )}
+              </>
             )}
           </View>
+        ) : (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <TouchableOpacity
+                style={[styles.sectionTitleRow, !canUseTranscript && styles.sectionTitleRowDisabled]}
+                onPress={() => {
+                  if (!canUseTranscript) {
+                    Alert.alert(
+                      'Audio not ready yet',
+                      'Open the transcript after the episode audio is available. Pull to refresh or tap refresh in a few seconds.',
+                    );
+                    return;
+                  }
+                  setShowTranscript((v) => !v);
+                }}
+                activeOpacity={0.7}>
+                <MaterialIcons
+                  name={showTranscript ? 'expand-less' : 'expand-more'}
+                  size={20}
+                  color={canUseTranscript ? '#111318' : '#C2C7D0'}
+                />
+                <View>
+                  <Text
+                    style={[
+                      styles.sectionTitle,
+                      !canUseTranscript && styles.sectionTitleDisabled,
+                    ]}>
+                    Transcript
+                  </Text>
+                  {!canUseTranscript && !isFailed && (
+                    <Text style={styles.sectionSubtitle}>
+                      {hasScriptPreview && !audioReady
+                        ? 'Timed lines unlock when audio finishes'
+                        : 'Unlocks when audio is ready'}
+                    </Text>
+                  )}
+                  {canUseTranscript && !showTranscript && transcript.length > 0 && (
+                    <Text style={styles.sectionSubtitle}>
+                      {transcript.length} lines — tap to expand
+                    </Text>
+                  )}
+                </View>
+              </TouchableOpacity>
 
-          {showTranscript && canUseTranscript && transcript.length === 0 && (
-            <Text style={styles.emptyTranscript}>
-              {isProcessing ? 'Preparing transcript…' : 'No transcript for this episode.'}
-            </Text>
-          )}
+              {trAvailable && canUseTranscript && showTranscript && (
+                <TouchableOpacity
+                  style={[styles.allTrBtn, showAllTr && styles.allTrBtnActive]}
+                  onPress={handleToggleAllTr}>
+                  <MaterialIcons
+                    name="translate"
+                    size={13}
+                    color={showAllTr ? '#FFFFFF' : '#0714B8'}
+                    style={{ marginRight: 4 }}
+                  />
+                  <Text
+                    style={[styles.allTrText, showAllTr && styles.allTrTextActive]}>
+                    Show Turkish
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
 
-          {showTranscript &&
-            canUseTranscript &&
-            transcript.map((seg) => (
-              <TranscriptLine
-                key={seg.order}
-                segment={seg}
-                active={activeIndex === seg.order}
-                showTr={!!perLineTr[seg.order]}
-                onToggleTr={() => handleLineTrToggle(seg.order)}
-                onWordLongPress={handleWordLongPress}
-              />
-            ))}
+            {showTranscript && canUseTranscript && transcript.length === 0 && (
+              <Text style={styles.emptyTranscript}>
+                {isProcessing ? 'Preparing transcript…' : 'No transcript for this episode.'}
+              </Text>
+            )}
 
-          {isLearning && canUseTranscript && showTranscript && transcript.length > 0 && (
-            <Text style={styles.hint}>
-              Tip: Long-press a word to see its Turkish meaning and save it to your vocabulary
-              notebook.
-            </Text>
-          )}
-        </View>
+            {showTranscript &&
+              canUseTranscript &&
+              transcript.map((seg) => (
+                <TranscriptLine
+                  key={seg.order}
+                  segment={seg}
+                  active={activeIndex === seg.order}
+                  showTr={!!perLineTr[seg.order]}
+                  onToggleTr={() => handleLineTrToggle(seg.order)}
+                  onWordLongPress={handleWordLongPress}
+                />
+              ))}
+
+            {isLearning && canUseTranscript && showTranscript && transcript.length > 0 && (
+              <Text style={styles.hint}>
+                Tip: Long-press a word to see its Turkish meaning and save it to your vocabulary
+                notebook.
+              </Text>
+            )}
+          </View>
+        )}
       </ScrollView>
 
       {/* Sticky: önce dinle — ses hazır olunca tam oynatıcı */}
@@ -559,16 +667,15 @@ export default function PodcastDetailScreen() {
             }
             const ln = podcast.listenNotesPodcastId?.trim();
             const lnEp = podcast.listenNotesEpisodeId?.trim();
-            router.push({
-              pathname: '/player',
-              params: ln
-                ? {
-                    id: podcast.id,
-                    lnId: ln,
-                    ...(lnEp ? { lnEpisodeId: lnEp } : {}),
-                  }
-                : { id: podcast.id },
-            });
+            openPlayerForEpisode(
+              router,
+              {
+                id: podcast.id,
+                listenNotesPodcastId: ln,
+                listenNotesEpisodeId: lnEp,
+              },
+              { fromDetail: true },
+            );
           }}
           activeOpacity={0.85}>
           <View style={styles.stickyPlayIconSlot}>
@@ -639,12 +746,6 @@ const styles = StyleSheet.create({
   headerTitle: { flex: 1, fontSize: 16, fontWeight: '700', color: '#111318' },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
 
-  refreshBtn: {
-    width: 34, height: 34, borderRadius: 17,
-    backgroundColor: '#EEF1FF',
-    alignItems: 'center', justifyContent: 'center',
-  },
-
   cefrBadge: {
     paddingHorizontal: 10,
     paddingVertical: 5,
@@ -665,8 +766,36 @@ const styles = StyleSheet.create({
   heroOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(10,8,30,0.15)' },
 
   tagsRow: {
-    flexDirection: 'row', flexWrap: 'wrap', gap: 8,
-    paddingHorizontal: 16, marginBottom: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    paddingHorizontal: 16,
+    marginBottom: 12,
+  },
+  tagsLeft: {
+    flex: 1,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  recreateBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+    backgroundColor: '#EEF1FF',
+    borderWidth: 1,
+    borderColor: '#C7CFFF',
+  },
+  recreateBtnDisabled: {
+    opacity: 0.65,
+  },
+  recreateBtnText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#0714B8',
   },
   tag: {
     flexDirection: 'row', alignItems: 'center',
@@ -860,6 +989,34 @@ const styles = StyleSheet.create({
   emptyTranscript: {
     color: '#8A8F9A', fontSize: 13, fontStyle: 'italic',
     paddingHorizontal: 12, paddingVertical: 8,
+  },
+
+  resourceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginHorizontal: 4,
+    marginBottom: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#EEF1F5',
+  },
+  resourceRowText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#0714B8',
+    lineHeight: 18,
+  },
+  resourceRowTextStatic: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#3D4048',
+    lineHeight: 18,
   },
 
   hint: {

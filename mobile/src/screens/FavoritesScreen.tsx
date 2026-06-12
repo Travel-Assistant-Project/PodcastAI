@@ -19,6 +19,10 @@ import {
   removePodcastFavorite,
 } from '@/src/api/favorites.api';
 import { getProfile } from '@/src/api/user.api';
+import {
+  hydrateProfilePhotoUrl,
+  useProfilePhotoDisplayUrl,
+} from '@/src/store/profilePhotoStore';
 import type { PodcastSummary } from '@/src/api/podcasts.api';
 import PodcastCardFavorite from '@/src/components/PodcastCardFavorite';
 import ScreenHeader, { HeaderProfileButton } from '@/src/components/ScreenHeader';
@@ -47,7 +51,7 @@ export default function FavoritesScreen() {
   const [activeSlug, setActiveSlug] = useState<string | null>(FAVORITE_FILTERS[0].slug);
   const [saved, setSaved] = useState<PodcastSummary[]>([]);
   const [loading, setLoading] = useState(true);
-  const [profilePhotoUrl, setProfilePhotoUrl] = useState<string | null>(null);
+  const profilePhotoUrl = useProfilePhotoDisplayUrl();
 
   const loadFavorites = useCallback(async () => {
     setLoading(true);
@@ -68,10 +72,10 @@ export default function FavoritesScreen() {
 
       getProfile()
         .then((p) => {
-          if (!cancelled) setProfilePhotoUrl(p.photoUrl?.trim() ? p.photoUrl : null);
+          if (!cancelled) hydrateProfilePhotoUrl(p.photoUrl);
         })
         .catch(() => {
-          if (!cancelled) setProfilePhotoUrl(null);
+          if (!cancelled) hydrateProfilePhotoUrl(null);
         });
 
       return () => {
