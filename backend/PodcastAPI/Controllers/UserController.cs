@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using PodcastAPI.Data;
 using PodcastAPI.Dto;
+using PodcastAPI.Services;
 using PodcastAPI.Services.Storage;
 using System.Security.Claims;
 
@@ -14,6 +15,7 @@ namespace PodcastAPI.Controllers;
 public class UserController(
     AppDbContext context,
     IProfilePhotoStorage profilePhotoStorage,
+    IPasswordHasher passwordHasher,
     IWebHostEnvironment env) : ControllerBase
 {
     private static readonly HashSet<string> AllowedExtensions = new(StringComparer.OrdinalIgnoreCase)
@@ -53,9 +55,16 @@ public class UserController(
         if (user == null)
             return NotFound(new { message = "User not found." });
 
-        user.FullName = updateDto.FullName;
+        var email = updateDto.Email.Trim().ToLowerInvariant();
+        if (await context.Users.AnyAsync(u => u.Email == email && u.Id != userId))
+            return Conflict(new { message = "This email is already registered." });
+
+        user.FullName = updateDto.FullName.Trim();
+        user.Email = email;
         user.Age = updateDto.Age;
-        user.Occupation = updateDto.Occupation;
+        user.Occupation = string.IsNullOrWhiteSpace(updateDto.Occupation)
+            ? null
+            : updateDto.Occupation.Trim();
 
         try
         {
@@ -65,6 +74,34 @@ public class UserController(
         catch (Exception)
         {
             return StatusCode(500, new { message = "An error occurred while updating the profile." });
+        }
+    }
+
+    [HttpPut("password")]
+    public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordDto changeDto)
+    {
+        var userId = GetUserId();
+        var user = await context.Users.FindAsync(userId);
+
+        if (user == null)
+            return NotFound(new { message = "User not found." });
+
+        if (!passwordHasher.Verify(user, changeDto.CurrentPassword))
+            return BadRequest(new { message = "Current password is incorrect." });
+
+        if (changeDto.CurrentPassword == changeDto.NewPassword)
+            return BadRequest(new { message = "New password must be different from the current password." });
+
+        user.PasswordHash = passwordHasher.HashPassword(changeDto.NewPassword);
+
+        try
+        {
+            await context.SaveChangesAsync();
+            return Ok(new { message = "Password updated successfully." });
+        }
+        catch (Exception)
+        {
+            return StatusCode(500, new { message = "An error occurred while updating the password." });
         }
     }
 

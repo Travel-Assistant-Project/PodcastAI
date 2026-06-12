@@ -9,6 +9,82 @@ export function formatDurationMinutes(seconds?: number | null): string {
   return `${m} min`;
 }
 
+/** /podcast ve /player arasında paylaşılan rota parametreleri. */
+export function buildEpisodeRouteParams(input: {
+  id: string;
+  listenNotesPodcastId?: string | null;
+  listenNotesEpisodeId?: string | null;
+  fromDetail?: boolean;
+}): Record<string, string> {
+  const ln = input.listenNotesPodcastId?.trim();
+  const lnEp = input.listenNotesEpisodeId?.trim();
+  const base = ln
+    ? {
+        id: input.id,
+        lnId: ln,
+        ...(lnEp ? { lnEpisodeId: lnEp } : {}),
+      }
+    : { id: input.id };
+
+  if (input.fromDetail) {
+    return { ...base, fromDetail: '1' };
+  }
+  return base;
+}
+
+/** Detay ekranından oynatıcıya geç (push). fromDetail ile player'dan geri → Home. */
+export function openPlayerForEpisode(
+  router: Router,
+  input: {
+    id: string;
+    listenNotesPodcastId?: string | null;
+    listenNotesEpisodeId?: string | null;
+  },
+  opts?: { fromDetail?: boolean },
+): void {
+  router.push({
+    pathname: '/player',
+    params: buildEpisodeRouteParams({ ...input, fromDetail: opts?.fromDetail }),
+  });
+}
+
+/**
+ * Oynatıcıdan detay/transcript/resources:
+ * - Detail'den gelindiyse back() (stack büyümez)
+ * - Doğrudan player açıldıysa replace ile detay
+ */
+export function openPodcastDetailFromPlayer(
+  router: Router,
+  input: {
+    id: string;
+    listenNotesPodcastId?: string | null;
+    listenNotesEpisodeId?: string | null;
+  },
+  fromDetail: boolean,
+): void {
+  if (fromDetail) {
+    router.back();
+    return;
+  }
+  router.replace({
+    pathname: '/podcast',
+    params: buildEpisodeRouteParams(input),
+  });
+}
+
+/**
+ * Oynatıcıyı kapat:
+ * - Detail üzerinden gelindiyse Home'a (Detail + Player birlikte kapanır)
+ * - Aksi halde normal geri
+ */
+export function exitPlayerScreen(router: Router, fromDetail: boolean): void {
+  if (fromDetail) {
+    router.dismiss(2);
+    return;
+  }
+  router.back();
+}
+
 export function openPodcastSummary(router: Router, item: PodcastSummary): void {
   const isExternal = item.status?.toLowerCase() === 'external';
   if (isExternal) {
@@ -76,6 +152,24 @@ export function inferFavoriteCategoryLabel(item: PodcastSummary): string | null 
     if (option) return option.label;
   }
   return null;
+}
+
+/** Kullanıcının en çok favorilediği kategori etiketi (eşitlikte alfabetik). */
+export function getTopFavoriteCategoryLabel(favorites: PodcastSummary[]): string | null {
+  const counts = new Map<string, number>();
+
+  for (const fav of favorites) {
+    const label = inferFavoriteCategoryLabel(fav);
+    if (!label) continue;
+    counts.set(label, (counts.get(label) ?? 0) + 1);
+  }
+
+  const sorted = [...counts.entries()].sort((a, b) => {
+    if (b[1] !== a[1]) return b[1] - a[1];
+    return a[0].localeCompare(b[0]);
+  });
+
+  return sorted[0]?.[0] ?? null;
 }
 
 export function matchesFavoriteFilter(item: PodcastSummary, slug: string | null): boolean {

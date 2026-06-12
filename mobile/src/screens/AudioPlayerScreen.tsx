@@ -30,6 +30,7 @@ import { getListenNotesPodcastDetail, getPodcastById, type PodcastDetail, type T
 import FavoriteButton from '@/src/components/FavoriteButton';
 import { usePlayback } from '@/src/context/PlaybackContext';
 import { categoryAccentColor } from '@/src/utils/categoryAccent';
+import { openPodcastDetailFromPlayer, exitPlayerScreen } from '@/src/utils/podcastNavigation';
 
 const { width } = Dimensions.get('window');
 const TRACK_WIDTH = width - 48;
@@ -44,13 +45,19 @@ function formatSeconds(totalSec: number): string {
 
 export default function AudioPlayerScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ id?: string; lnId?: string; lnEpisodeId?: string }>();
+  const params = useLocalSearchParams<{
+    id?: string;
+    lnId?: string;
+    lnEpisodeId?: string;
+    fromDetail?: string;
+  }>();
   const lnId =
     typeof params.lnId === 'string' && params.lnId.trim().length > 0 ? params.lnId.trim() : undefined;
   const lnEpisodeFromRoute =
     typeof params.lnEpisodeId === 'string' && params.lnEpisodeId.trim().length > 0
       ? params.lnEpisodeId.trim()
       : undefined;
+  const fromDetailRoute = params.fromDetail === '1';
   const podcastIdFromRoute =
     typeof params.id === 'string' && params.id.trim().length > 0 ? params.id.trim() : undefined;
 
@@ -185,29 +192,26 @@ export default function AudioPlayerScreen() {
 
   const handleStopAndClose = useCallback(async () => {
     await playback.stopAndClear();
-    router.back();
-  }, [playback, router]);
+    exitPlayerScreen(router, fromDetailRoute);
+  }, [playback, router, fromDetailRoute]);
 
   /** Aşağı çek → tam ekranı kapat; ses çalar, mini player görünür (X gibi durdurmaz). */
   const minimizeToBar = useCallback(() => {
-    router.back();
-  }, [router]);
+    exitPlayerScreen(router, fromDetailRoute);
+  }, [router, fromDetailRoute]);
 
-  const openPodcastDetailForTranscript = useCallback(() => {
+  const openPodcastDetailPage = useCallback(() => {
     if (!podcast) return;
-    const ln = podcast.listenNotesPodcastId?.trim();
-    const lnEp = podcast.listenNotesEpisodeId?.trim();
-    router.push({
-      pathname: '/podcast',
-      params: ln
-        ? {
-            id: podcast.id,
-            lnId: ln,
-            ...(lnEp ? { lnEpisodeId: lnEp } : {}),
-          }
-        : { id: podcast.id },
-    });
-  }, [router, podcast]);
+    openPodcastDetailFromPlayer(
+      router,
+      {
+        id: podcast.id,
+        listenNotesPodcastId: podcast.listenNotesPodcastId,
+        listenNotesEpisodeId: podcast.listenNotesEpisodeId,
+      },
+      fromDetailRoute,
+    );
+  }, [router, podcast, fromDetailRoute]);
 
   const dismissTranslateY = useSharedValue(0);
   const dismissThreshold = Math.min(128, windowHeight * 0.2);
@@ -280,7 +284,11 @@ export default function AudioPlayerScreen() {
   const isExternal =
     podcast?.status?.toLowerCase() === 'external' ||
     Boolean(podcast?.listenNotesPodcastId?.trim());
-  const hasTranscriptPanel = showCaption && transcript.length > 0;
+  const hasTranscriptPanel = !isExternal && showCaption && transcript.length > 0;
+
+  useEffect(() => {
+    if (isExternal) setShowCaption(false);
+  }, [isExternal]);
 
   const sheetMetrics = useMemo(() => {
     const expanded = Math.min(windowHeight * 0.85, windowHeight - insets.top - 8);
@@ -579,34 +587,40 @@ export default function AudioPlayerScreen() {
       </View>
 
           {/* Secondary Controls */}
-          <View style={styles.secondaryControls}>
+          <View style={[styles.secondaryControls, isExternal && styles.secondaryControlsExternal]}>
         <TouchableOpacity style={styles.secondaryBtn} onPress={cycleSpeed}>
           <Text style={styles.speedText}>{speed}x</Text>
           <Text style={styles.secondaryLabel}>SPEED</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.secondaryBtn}
-          onPress={() => setShowCaption((v) => !v)}>
-          <View
-            style={[
-              styles.captionIcon,
-              showCaption && { backgroundColor: '#0714B8' },
-            ]}>
-            <MaterialIcons
-              name={showCaption ? 'closed-caption' : 'closed-caption-off'}
-              size={22}
-              color={showCaption ? '#FFFFFF' : '#5A5F6A'}
-            />
-          </View>
-          <Text style={styles.secondaryLabel}>CAPTION</Text>
-        </TouchableOpacity>
+        {!isExternal && (
+          <TouchableOpacity
+            style={styles.secondaryBtn}
+            onPress={() => setShowCaption((v) => !v)}>
+            <View
+              style={[
+                styles.captionIcon,
+                showCaption && { backgroundColor: '#0714B8' },
+              ]}>
+              <MaterialIcons
+                name={showCaption ? 'closed-caption' : 'closed-caption-off'}
+                size={22}
+                color={showCaption ? '#FFFFFF' : '#5A5F6A'}
+              />
+            </View>
+            <Text style={styles.secondaryLabel}>CAPTION</Text>
+          </TouchableOpacity>
+        )}
 
         <TouchableOpacity
           style={styles.secondaryBtn}
-          onPress={openPodcastDetailForTranscript}>
-          <MaterialIcons name="format-list-bulleted" size={22} color="#5A5F6A" />
-          <Text style={styles.secondaryLabel}>TRANSCRIPT</Text>
+          onPress={openPodcastDetailPage}>
+          <MaterialIcons
+            name={isExternal ? 'library-books' : 'format-list-bulleted'}
+            size={22}
+            color="#5A5F6A"
+          />
+          <Text style={styles.secondaryLabel}>{isExternal ? 'RESOURCES' : 'TRANSCRIPT'}</Text>
         </TouchableOpacity>
       </View>
           </ScrollView>
@@ -963,6 +977,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-around',
     marginBottom: 0,
+  },
+
+  secondaryControlsExternal: {
+    justifyContent: 'center',
+    gap: 72,
   },
 
   secondaryBtn: {

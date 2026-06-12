@@ -25,6 +25,10 @@ import ScreenHeader, { HeaderProfileButton } from '@/src/components/ScreenHeader
 import RecentlyPlayedList from '@/src/components/RecentlyPlayedList';
 import { getUser } from '@/src/store/authStore';
 import { getProfile } from '@/src/api/user.api';
+import {
+  hydrateProfilePhotoUrl,
+  useProfilePhotoDisplayUrl,
+} from '@/src/store/profilePhotoStore';
 import { categoryAccentColor as categoryColor } from '@/src/utils/categoryAccent';
 import { categoryTag } from '@/src/utils/podcastNavigation';
 
@@ -231,7 +235,7 @@ export default function HomeScreen() {
   const [loadingLatest, setLoadingLatest] = useState(true);
   const [loadingTrending, setLoadingTrending] = useState(true);
   const [loadingRecent, setLoadingRecent] = useState(true);
-  const [profilePhotoUrl, setProfilePhotoUrl] = useState<string | null>(null);
+  const profilePhotoUrl = useProfilePhotoDisplayUrl();
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -334,10 +338,10 @@ export default function HomeScreen() {
 
       getProfile()
         .then((p) => {
-          if (!cancelled) setProfilePhotoUrl(p.photoUrl?.trim() ? p.photoUrl : null);
+          if (!cancelled) hydrateProfilePhotoUrl(p.photoUrl);
         })
         .catch(() => {
-          if (!cancelled) setProfilePhotoUrl(null);
+          if (!cancelled) hydrateProfilePhotoUrl(null);
         });
 
       return () => {
