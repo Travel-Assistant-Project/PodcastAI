@@ -445,7 +445,7 @@ export default function AudioPlayerScreen() {
                 </TouchableOpacity>
                 <View style={styles.headerCenter}>
                   <Text style={styles.headerSub}>NOW PLAYING</Text>
-                  <Text style={styles.headerTitle}>PodcastAI</Text>
+                  <Text style={styles.headerTitle}>Podify</Text>
                 </View>
                 <View style={styles.headerRight}>
                   {podcast ? (

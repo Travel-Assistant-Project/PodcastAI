@@ -48,7 +48,7 @@ export default function ScreenHeader({ pageTitle, right, style }: ScreenHeaderPr
     <View style={[styles.header, style]}>
       <View style={styles.headerLeft}>
         <MaterialIcons name="auto-awesome" size={16} color="#8B8FFF" />
-        <Text style={styles.headerBrand}>PodcastAI</Text>
+        <Text style={styles.headerBrand}>Podify</Text>
         <View style={styles.headerDivider} />
         <Text style={styles.headerPage}>{pageTitle}</Text>
       </View>

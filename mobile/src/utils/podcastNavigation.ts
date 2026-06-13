@@ -205,7 +205,7 @@ export function favoriteCardSubtitle(item: PodcastSummary): string {
   const dur = formatDurationMinutes(item.durationSeconds);
   if (dur) return dur;
 
-  return 'PodcastAI';
+  return 'Podify';
 }
 
 export function matchesCategoryFilter(item: PodcastSummary, categoryLabel: string, apiSlug: string): boolean {
