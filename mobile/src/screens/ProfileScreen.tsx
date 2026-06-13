@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import * as ImagePicker from 'expo-image-picker';
 
@@ -19,6 +20,12 @@ import { setAuthToken } from '@/src/api/client';
 import { getUser, setUser } from '@/src/store/authStore';
 import ScreenHeader, { HeaderProfileButton } from '@/src/components/ScreenHeader';
 import { getProfile, uploadProfilePhoto, type UserProfile } from '@/src/api/user.api';
+import {
+  clearProfilePhotoUrl,
+  hydrateProfilePhotoUrl,
+  setProfilePhotoUrl,
+  useProfilePhotoDisplayUrl,
+} from '@/src/store/profilePhotoStore';
 import { usePlayback } from '@/src/context/PlaybackContext';
 import { ensureNotificationPermissionsAsync } from '@/src/services/notifications';
 import {
@@ -50,13 +57,19 @@ export default function ProfileScreen() {
 
   const displayName = profile?.fullName ?? authUser?.fullName ?? 'User';
   const email = profile?.email ?? authUser?.email ?? '';
+  const displayPhotoUrl = useProfilePhotoDisplayUrl(profile?.photoUrl);
 
-  useEffect(() => {
-    getProfile()
-      .then(setProfile)
-      .catch(() => setProfile(null));
-    void loadNotificationsEnabled().then(setNotificationsEnabled);
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      getProfile()
+        .then((data) => {
+          setProfile(data);
+          hydrateProfilePhotoUrl(data.photoUrl);
+        })
+        .catch(() => setProfile(null));
+      void loadNotificationsEnabled().then(setNotificationsEnabled);
+    }, []),
+  );
 
   const handleNotificationsToggle = async (value: boolean) => {
     if (value) {
@@ -96,7 +109,18 @@ export default function ProfileScreen() {
     setPhotoLoading(true);
     try {
       const photoUrl = await uploadProfilePhoto(uri);
-      setProfile((prev) => (prev ? { ...prev, photoUrl } : prev));
+      setProfilePhotoUrl(photoUrl);
+      setProfile((prev) => {
+        if (prev) return { ...prev, photoUrl };
+        const auth = getUser();
+        return {
+          id: auth?.id ?? '',
+          fullName: auth?.fullName ?? 'User',
+          email: auth?.email ?? '',
+          createdAt: new Date().toISOString(),
+          photoUrl,
+        };
+      });
     } catch {
       Alert.alert('Upload failed', 'Could not upload photo. Please try again.');
     } finally {
@@ -114,6 +138,7 @@ export default function ProfileScreen() {
             await stopAndClear();
             setAuthToken(null);
             setUser(null);
+            clearProfilePhotoUrl();
             router.dismissAll();
             router.replace('/');
           },
@@ -126,9 +151,7 @@ export default function ProfileScreen() {
       <ScreenHeader
         pageTitle="Profile"
         right={
-          <HeaderProfileButton
-            photoUrl={profile?.photoUrl?.trim() ? profile.photoUrl : null}
-          />
+          <HeaderProfileButton photoUrl={displayPhotoUrl} />
         }
       />
 
@@ -142,10 +165,10 @@ export default function ProfileScreen() {
                 <ActivityIndicator color="#0714B8" />
               </View>
             )}
-            {!photoLoading && profile?.photoUrl && (
-              <Image source={{ uri: profile.photoUrl }} style={styles.avatar} />
+            {!photoLoading && displayPhotoUrl && (
+              <Image key={displayPhotoUrl} source={{ uri: displayPhotoUrl }} style={styles.avatar} />
             )}
-            {!photoLoading && !profile?.photoUrl && <DefaultAvatar size={96} />}
+            {!photoLoading && !displayPhotoUrl && <DefaultAvatar size={96} />}
             <TouchableOpacity
               style={styles.editAvatarBtn}
               activeOpacity={0.8}
@@ -249,13 +272,17 @@ export default function ProfileScreen() {
 
             <View style={styles.separator} />
 
-            <TouchableOpacity style={styles.preferenceRow} activeOpacity={0.75}>
+            <TouchableOpacity
+              style={styles.preferenceRow}
+              activeOpacity={0.75}
+              onPress={() => router.push('/account-settings')}
+            >
               <View style={[styles.prefIconWrap, { backgroundColor: '#F0F3FF' }]}>
-                <MaterialIcons name="shield" size={20} color="#0714B8" />
+                <MaterialIcons name="settings" size={20} color="#0714B8" />
               </View>
               <View style={styles.prefContent}>
-                <Text style={styles.prefTitle}>Account Security</Text>
-                <Text style={styles.prefSub}>Two-factor authentication active</Text>
+                <Text style={styles.prefTitle}>Account Settings</Text>
+                <Text style={styles.prefSub}>Update name, email, job, age and password</Text>
               </View>
               <MaterialIcons name="chevron-right" size={22} color="#C2C7D0" />
             </TouchableOpacity>

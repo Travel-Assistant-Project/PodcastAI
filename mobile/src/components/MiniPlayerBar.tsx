@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { usePlayback } from '@/src/context/PlaybackContext';
 import { PODCAST_LISTEN_STICKY_HEIGHT } from '@/src/constants/podcastDetailLayout';
+import { openPlayerForEpisode } from '@/src/utils/podcastNavigation';
 
 const TAB_BAR_HEIGHT = 49;
 
@@ -73,16 +74,16 @@ export default function MiniPlayerBar() {
         onPress={() => {
           const ln = track.listenNotesPodcastId?.trim();
           const lnEp = track.listenNotesEpisodeId?.trim();
-          router.push({
-            pathname: '/player',
-            params: ln
-              ? {
-                  id: track.podcastId,
-                  lnId: ln,
-                  ...(lnEp ? { lnEpisodeId: lnEp } : {}),
-                }
-              : { id: track.podcastId },
-          });
+          const onDetail = isPodcastDetailPath(pathname, segments);
+          openPlayerForEpisode(
+            router,
+            {
+              id: track.podcastId,
+              listenNotesPodcastId: ln,
+              listenNotesEpisodeId: lnEp,
+            },
+            { fromDetail: onDetail },
+          );
         }}
         android_ripple={{ color: 'rgba(7,20,184,0.12)' }}>
         <View style={styles.thumb}>

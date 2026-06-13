@@ -15,6 +15,30 @@ export async function getProfile(): Promise<UserProfile> {
   return data;
 }
 
+export async function updateProfile(payload: {
+  fullName: string;
+  email: string;
+  age?: number | null;
+  occupation?: string | null;
+}): Promise<void> {
+  await api.put('/api/user/profile', {
+    fullName: payload.fullName,
+    email: payload.email,
+    age: payload.age ?? null,
+    occupation: payload.occupation ?? null,
+  });
+}
+
+export async function changePassword(payload: {
+  currentPassword: string;
+  newPassword: string;
+}): Promise<void> {
+  await api.put('/api/user/password', {
+    currentPassword: payload.currentPassword,
+    newPassword: payload.newPassword,
+  });
+}
+
 export async function uploadProfilePhoto(localUri: string): Promise<string> {
   const filename = localUri.split('/').pop() ?? 'photo.jpg';
   const ext = filename.split('.').pop()?.toLowerCase() ?? 'jpg';
