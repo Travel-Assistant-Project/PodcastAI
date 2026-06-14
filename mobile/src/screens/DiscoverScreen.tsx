@@ -231,7 +231,7 @@ export default function DiscoverScreen() {
 
         {/* PodcastAI Picks */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>PodcastAI Picks</Text>
+          <Text style={styles.sectionTitle}>Podify Picks</Text>
           <Text style={styles.sectionSub}>{picksSubtitle}</Text>
 
           {picksLoading && (

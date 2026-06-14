@@ -17,7 +17,7 @@ const WelcomeScreen = () => {
       {/* Logo */}
       <View style={styles.logoRow}>
         <Text style={styles.logoIcon}>✦</Text>
-        <Text style={styles.logoText}>PodcastAI</Text>
+        <Text style={styles.logoText}>Podify</Text>
       </View>
 
       {/* Illustration area */}
@@ -72,7 +72,7 @@ const WelcomeScreen = () => {
         </TouchableOpacity>
       </View>
 
-      <Text style={styles.footer}>©️ PODCAST-AI</Text>
+      <Text style={styles.footer}>©️ PODIFY</Text>
     </SafeAreaView>
   );
 };
