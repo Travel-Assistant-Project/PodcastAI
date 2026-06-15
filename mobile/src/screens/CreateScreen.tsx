@@ -13,6 +13,10 @@ import { useRouter } from 'expo-router';
 
 import ScreenHeader from '@/src/components/ScreenHeader';
 import { generatePodcast } from '@/src/api/podcasts.api';
+import {
+  getPodcastGenerateErrorMessage,
+  handlePodcastGenerateError,
+} from '@/src/utils/podcastGenerateError';
 import { ensureNotificationPermissionsAsync } from '@/src/services/notifications';
 import { startWatchingPodcastCompletion } from '@/src/services/podcastCompletionWatcher';
 import { getNotificationsEnabled } from '@/src/store/notificationPrefs';
@@ -91,9 +95,14 @@ export default function CreateScreen() {
 
       startWatchingPodcastCompletion(resp.podcastId);
       router.push({ pathname: '/podcast', params: { id: resp.podcastId } });
-    } catch (error: any) {
-      const msg = error?.response?.data?.message ?? 'Could not start podcast generation.';
-      Alert.alert('Error', msg);
+    } catch (error: unknown) {
+      if (handlePodcastGenerateError(error, router)) {
+        return;
+      }
+      Alert.alert(
+        'Error',
+        getPodcastGenerateErrorMessage(error, 'Could not start podcast generation.'),
+      );
     } finally {
       setIsGenerating(false);
     }

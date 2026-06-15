@@ -184,6 +184,7 @@ source venv/bin/activate
 uvicorn main:app --reload --port 8000
 
 çalışmazsa:
+cd ai-service
 source venv/bin/activate
 uvicorn app.main:app --reload --port 8001
 

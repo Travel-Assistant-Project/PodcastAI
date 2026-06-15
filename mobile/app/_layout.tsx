@@ -12,6 +12,8 @@ if (__DEV__) {
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { FavoritesProvider } from '@/src/context/FavoritesContext';
 import { PlaybackProvider } from '@/src/context/PlaybackContext';
+import AppToast from '@/src/components/AppToast';
+import ExploreRedirectPrompt from '@/src/components/ExploreRedirectPrompt';
 import MiniPlayerBar from '@/src/components/MiniPlayerBar';
 import { usePushNotifications } from '@/src/hooks/usePushNotifications';
 import { loadNotificationsEnabled } from '@/src/store/notificationPrefs';
@@ -47,6 +49,8 @@ export default function RootLayout() {
         <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
       </Stack>
       <MiniPlayerBar />
+      <AppToast />
+      <ExploreRedirectPrompt />
       <StatusBar style="auto" />
     </ThemeProvider>
       </FavoritesProvider>
