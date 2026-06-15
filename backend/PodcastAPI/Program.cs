@@ -103,7 +103,7 @@ app.UseStaticFiles();
 
 // Hangfire Dashboard paneli (takip için /hangfire)
 app.UseHangfireDashboard();
-
+app.UseMiddleware<PodcastAPI.Middlewares.GlobalExceptionMiddleware>();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();

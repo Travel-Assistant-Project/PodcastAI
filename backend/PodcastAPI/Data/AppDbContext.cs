@@ -18,6 +18,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<ExternalListeningHistory> ExternalListeningHistories { get; set; }
     public DbSet<ExternalFavorite> ExternalFavorites { get; set; }
 
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         // Users (mevcut)
