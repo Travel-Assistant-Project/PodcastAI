@@ -1,3 +1,4 @@
+import { assertSuccessfulGenerateResponse } from '@/src/api/apiError';
 import { api } from '@/src/api/client';
 import { getCuratedDetail } from '@/src/data/curatedPodcasts';
 
@@ -112,8 +113,11 @@ export type ListenNotesPlayPayload = {
 export async function generatePodcast(
   payload: GeneratePodcastRequest,
 ): Promise<GeneratePodcastResponse> {
-  const { data } = await api.post<GeneratePodcastResponse>('/api/podcasts/generate', payload);
-  return data;
+  const { data } = await api.post<GeneratePodcastResponse>(
+    '/api/podcasts/generate',
+    payload,
+  );
+  return assertSuccessfulGenerateResponse(data);
 }
 
 export async function getPodcastById(id: string): Promise<PodcastDetail> {

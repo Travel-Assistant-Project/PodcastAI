@@ -33,7 +33,7 @@ public class GlobalExceptionMiddleware(RequestDelegate next, ILogger<GlobalExcep
         var response = new ErrorResponseDto
         {
             Success = false,
-            Message = "Şu an bu işlemi gerçekleştiremiyoruz. Lütfen Explore sayfasındaki içeriklere göz atın.",
+            Message = "We are currently unable to perform this operation. Please review the content on the Explore page.",
             Action = "REDIRECT_TO_EXPLORE" // Mobil taraf bu flag'i görüp yönlendirme yapacak
         };
 

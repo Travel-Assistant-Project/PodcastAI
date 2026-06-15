@@ -15,6 +15,10 @@ import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { openBrowserAsync, WebBrowserPresentationStyle } from 'expo-web-browser';
 
 import {
+  getPodcastGenerateErrorMessage,
+  handlePodcastGenerateError,
+} from '@/src/utils/podcastGenerateError';
+import {
   generatePodcast,
   getListenNotesPodcastDetail,
   getPodcastById,
@@ -183,10 +187,13 @@ export default function PodcastDetailScreen() {
                 });
                 startWatchingPodcastCompletion(resp.podcastId);
                 router.replace({ pathname: '/podcast', params: { id: resp.podcastId } });
-              } catch (e: any) {
+              } catch (e: unknown) {
+                if (handlePodcastGenerateError(e, router)) {
+                  return;
+                }
                 Alert.alert(
                   'Could not recreate',
-                  e?.response?.data?.message ?? 'Try again in a moment.',
+                  getPodcastGenerateErrorMessage(e, 'Try again in a moment.'),
                 );
               } finally {
                 setRecreating(false);
