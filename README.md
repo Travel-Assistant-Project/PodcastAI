@@ -1,229 +1,202 @@
-PROJEYI ÇALISTIRMA DETAYLARI EN AŞAGIDADIRR!!
+# 🎙️ PodcastAI
 
-ai-podcast-platform/
-│
-├── backend/        # .NET API
-├── ai-service/     # Python FastAPI (AI + TTS)
-├── mobile/         # React Native App
-│
-├── docker-compose.yml
+**An AI-powered mobile application for creating and experiencing personalized podcasts.**
+
+PodcastAI is a mobile application project that brings together mobile development, backend services, and AI-powered capabilities in a modular architecture. The project is designed to provide a foundation for generating AI-assisted podcast experiences through an integrated application and service ecosystem.
+
+## ✨ Overview
+
+PodcastAI consists of three main components:
+
+- **Mobile Application:** A cross-platform mobile interface built with React Native and Expo.
+- **Backend API:** A .NET-based backend responsible for application-level operations and communication between services.
+- **AI Service:** A Python-based service built with FastAPI, designed to support AI-related functionality and text-to-speech integrations.
+
+The modular structure separates mobile, backend, and AI responsibilities, making the application easier to develop, maintain, and extend.
+
+## 🏗️ Architecture
+
+```text
+PodcastAI/
+├── ai-service/    # Python / FastAPI AI service
+├── backend/       # .NET backend API
+├── mobile/        # React Native / Expo application
+├── .gitignore
 ├── README.md
-└── .env
+└── ai-podcast-platform.sln
+```
 
-1️⃣ Monorepo Kurulumu
-📌 1. Ana klasörü oluştur
-mkdir ai-podcast-platform
-cd ai-podcast-platform
-git init
+### Technology Stack
 
-2️⃣ Backend (.NET) Kurulumu
-📌 2. .NET Web API oluştur
-cd backend
-dotnet new webapi -n PodcastAPI
-cd PodcastAPI
+| Component | Technologies |
+|---|---|
+| Mobile | React Native, Expo, TypeScript |
+| Backend | C#, .NET Web API |
+| AI Service | Python, FastAPI, Uvicorn |
+| API Communication | HTTP / REST |
+| Development Tools | Git, GitHub, npm, pip |
 
-📌 3. Gerekli paketler
-dotnet add package Microsoft.AspNetCore.Authentication.JwtBearer
-dotnet add package Microsoft.EntityFrameworkCore.SqlServer
-dotnet add package Microsoft.EntityFrameworkCore.Tools
-dotnet add package StackExchange.Redis
+## 🚀 Getting Started
 
-📌 4. Katmanlı yapı (çok önemli)
-backend/
- └── PodcastAPI/
-     ├── Controllers/
-     ├── Services/
-     ├── Models/
-     ├── DTOs/
-     ├── Data/
-     └── Helpers/
+### Prerequisites
 
-📌 5. Çalıştır
-dotnet run
-API: https://localhost:5001
+Make sure the following tools are installed:
 
-3️⃣ AI Service (Python / FastAPI)
-📌 1. Klasör oluştur
-cd ../../
-mkdir ai-service
+- [Node.js and npm](https://nodejs.org/)
+- [Python 3](https://www.python.org/)
+- [Git](https://git-scm.com/)
+- [.NET SDK](https://dotnet.microsoft.com/download)
+- [Expo Go](https://expo.dev/go/) or an appropriate mobile simulator
+
+### 1. Clone the Repository
+
+```bash
+git clone https://github.com/Travel-Assistant-Project/PodcastAI.git
+cd PodcastAI
+```
+
+### 2. Set Up the AI Service
+
+Navigate to the AI service directory:
+
+```bash
 cd ai-service
-
-📌 2. Virtual environment
 python3 -m venv venv
-source venv/bin/activate   # Mac/Linux
-venv\Scripts\activate      # Windows
+```
 
-📌 3. Paketler
-pip install fastapi uvicorn requests python-dotenv
+Activate the virtual environment.
 
-👉 Sonra AI için (SONRAYAPILCAK):
+**macOS / Linux**
 
-pip install openai
-pip install gtts   # veya elevenlabs SDK
-📌 4. Basit FastAPI başlat
-main.py:
-from fastapi import FastAPI
-
-app = FastAPI()
-
-@app.get("/")
-def root():
-    return {"message": "AI Service running"}
-
-📌 5. Çalıştır
-uvicorn main:app --reload --port 8000
-
-➡️ API: http://localhost:8000
-
-4️⃣ Mobile (React Native) Kurulumu
-📌 1. Klasör
-cd ../../
-npx create-expo-app mobile
-cd mobile
-
-📌 2. Gerekli paketler
-npm install axios
-npm install @react-navigation/native
-npm install expo-av
-
-📌 3. Çalıştır
-npx expo start
-
-----------------------------(AKIŞTAYAPILACAK)-----------------------------
-5️⃣ Servislerin Birbirine Bağlanması 
-📡 .NET → Python
-
-.NET içinde:
-
-var client = new HttpClient();
-var response = await client.GetAsync("http://localhost:8000/generate");
-📡 React Native → .NET
-import axios from "axios";
-
-const API = "http://localhost:5000";
-
-const getPodcast = async () => {
-  const res = await axios.get(`${API}/podcast/today`);
-  return res.data;
-};
-
-6️⃣ Docker ile Profesyonel Setup (ÖNEMLİ)
-
-Bu projeyi uçuracak kısım burası 🚀
-
-📦 docker-compose.yml
-version: '3.8'
-
-services:
-
-  backend:
-    build: ./backend/PodcastAPI
-    ports:
-      - "5000:80"
-    depends_on:
-      - ai-service
-
-  ai-service:
-    build: ./ai-service
-    ports:
-      - "8000:8000"
-
-  redis:
-    image: redis
-    ports:
-      - "6379:6379"
-
-
-📦 Python Dockerfile
-FROM python:3.10
-
-WORKDIR /app
-
-COPY . .
-
-RUN pip install fastapi uvicorn
-
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
-
-
-📦 .NET Dockerfile
-FROM mcr.microsoft.com/dotnet/aspnet:7.0
-WORKDIR /app
-COPY . .
-ENTRYPOINT ["dotnet", "PodcastAPI.dll"]
-
-📌 Çalıştır
-docker-compose up --build
-
-7️⃣ Ortak ENV Yönetimi
-
-Root .env:
-
-OPENAI_API_KEY=xxx
-FIREBASE_URL=xxx
-REDIS_URL=redis:6379
-
---------------------------------------------------------------------------
-🎯 Sonuç (Jüriye söylemelik)
-
-Bu setup sayesinde şunu diyebilirsin:
-
-Mikroservis mimarisi kullandım
-AI servis ayrı ölçeklenebilir
-Backend orchestration yapıyor
-Mobile client bağımsuz
-Docker ile production-ready hale getirdim
-
-
------------- PROJEYİ ÇALIŞTIRMA ----------------------
-👉 3 ayrı terminal / sekme açarsın
-
-🟢 Terminal 1 → AI Service (Python)
-cd ai-service
+```bash
 source venv/bin/activate
+```
+
+**Windows**
+
+```powershell
+venv\Scripts\activate
+```
+
+Install the project's Python dependencies using the available dependency file. If the repository contains `requirements.txt`, run:
+
+```bash
+pip install -r requirements.txt
+```
+
+Start the FastAPI service:
+
+```bash
 uvicorn main:app --reload --port 8000
+```
 
-çalışmazsa:
-source venv/bin/activate
-uvicorn app.main:app --reload --port 8001
+If the application entry point is located elsewhere, adjust the Uvicorn module path accordingly.
 
-🔵 Terminal 2 → Backend (.NET)
-cd backend/PodcastAPI
+The service should be available at:
+
+- API: `http://localhost:8000`
+- Interactive API documentation: `http://localhost:8000/docs`
+
+### 3. Set Up the Backend
+
+Open a separate terminal and navigate to the backend project directory.
+
+```bash
+cd backend
+```
+
+Locate the directory containing the `.csproj` file, then restore dependencies and run the application:
+
+```bash
+dotnet restore
 dotnet run
+```
 
-🟣 Terminal 3 → Mobile (React Native)
+The backend URL and port are determined by the project's launch settings.
+
+### 4. Set Up the Mobile Application
+
+Open another terminal:
+
+```bash
 cd mobile
+npm install
+```
+
+Configure the backend API URL in the mobile application's environment configuration.
+
+For example, when running the app in the iOS Simulator:
+
+```env
+EXPO_PUBLIC_API_BASE_URL=http://localhost:5191
+```
+
+Replace the example port with the actual backend port. Android emulators and physical devices may require a different host address.
+
+Start the Expo development server:
+
+```bash
 npx expo start
+```
 
--------------------------------------------------------
+Follow the terminal instructions to open the application in a simulator or Expo Go.
 
-PYTHON KISMINDA TERMINALDE:
-Aktifleştir
-source venv/bin/activate
+## 🔧 Configuration
 
-Başarılı olursa terminal şöyle değişir:
+Configure environment variables separately for each service as required by its implementation.
 
-(venv) admin@...
+Example mobile configuration:
 
-Buradan çıkmak için terminale; deactivate
+```env
+EXPO_PUBLIC_API_BASE_URL=http://localhost:5191
+```
 
-🧠 Ne zaman açık kalmalı?
-✅ Açık bırak:
-Python servisinde çalışırken
-pip install yaparken
-FastAPI çalıştırırken
-❌ Kapat:
-.NET tarafına geçerken
-React Native çalıştırırken
+Keep API keys, database credentials, and other secrets in environment files or a secure configuration system. Do not commit sensitive values to version control.
 
-DOĞRU ÇALIŞTIRILMALI
+## 🧩 Development Workflow
 
-----------------------
+For local development, run each component in a separate terminal:
 
-cd mobile
-npx expo prebuild --clean
-npx expo run:ios
+| Terminal | Component | Command |
+|---|---|---|
+| 1 | AI Service | `uvicorn main:app --reload --port 8000` |
+| 2 | Backend | `dotnet run` |
+| 3 | Mobile | `npx expo start` |
 
+Ensure that the mobile application points to the correct backend address and that the backend can reach the AI service when required.
 
-cd mobile
-npx expo run:ios
+## 🛠️ Troubleshooting
+
+**Python dependencies cannot be installed**
+
+Activate the virtual environment and verify that the dependency file exists in the current directory.
+
+**The mobile application cannot connect to the backend**
+
+Check the API base URL, the backend's running port, and network accessibility. Remember that `localhost` refers to the device or emulator itself when used from a mobile environment.
+
+**The FastAPI service does not start**
+
+Verify the Python entry-point file and ensure that the Uvicorn module path matches the actual project structure.
+
+**The .NET application does not start**
+
+Run `dotnet restore` in the directory containing the project file and check the configured SDK version.
+
+## 🤝 Contributing
+
+Contributions, suggestions, and bug reports are welcome.
+
+1. Fork the repository.
+2. Create a feature branch.
+3. Commit your changes with a descriptive message.
+4. Push your branch.
+5. Open a pull request describing your changes.
+
+## 📄 License
+
+No license has been specified in this README. Please check the repository's licensing terms before distributing or reusing the project.
+
+---
+
+Developed as part of the **Travel Assistant Project**.
