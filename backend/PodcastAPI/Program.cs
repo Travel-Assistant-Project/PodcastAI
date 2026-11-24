@@ -12,14 +12,33 @@ using PodcastAPI.Services.Storage;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// .env dosyasını yükle
-Env.Load();
-
+// Local development can use a gitignored .env file. Deployed environments
+// should provide the same values through their secret/configuration store.
 var envFile = Path.Combine(builder.Environment.ContentRootPath, ".env");
-if (File.Exists(envFile)) Env.Load(envFile); else Env.Load();
+if (File.Exists(envFile))
+{
+    Env.Load(envFile);
+}
+
+static string RequireEnvironmentVariable(string name, int minimumLength = 1)
+{
+    var value = Env.GetString(name)?.Trim();
+    if (string.IsNullOrWhiteSpace(value) || value.Length < minimumLength)
+    {
+        throw new InvalidOperationException(
+            $"Required environment variable {name} is missing or invalid.");
+    }
+
+    return value;
+}
 
 // Veritabanı bağlantı dizesi
-var connectionString = $"Host={Env.GetString("DB_HOST")};Port={Env.GetString("DB_PORT")};Database={Env.GetString("DB_NAME")};Username={Env.GetString("DB_USER")};Password={Env.GetString("DB_PASS")}";
+var dbHost = RequireEnvironmentVariable("DB_HOST");
+var dbPort = RequireEnvironmentVariable("DB_PORT");
+var dbName = RequireEnvironmentVariable("DB_NAME");
+var dbUser = RequireEnvironmentVariable("DB_USER");
+var dbPassword = RequireEnvironmentVariable("DB_PASS");
+var connectionString = $"Host={dbHost};Port={dbPort};Database={dbName};Username={dbUser};Password={dbPassword}";
 
 builder.Services.AddDbContext<AppDbContext>(options => options.UseNpgsql(connectionString));
 
@@ -31,7 +50,7 @@ builder.Services.AddHangfire(config => config
 builder.Services.AddHangfireServer();
 
 // JWT Ayarları
-var jwtSecret = Env.GetString("JWT_SECRET");
+var jwtSecret = RequireEnvironmentVariable("JWT_SECRET", minimumLength: 32);
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
@@ -77,16 +96,17 @@ else
 }
 
 // AI Microservice için HTTP istemcisi
-var aiServiceSecret = Env.GetString("AI_SERVICE_SECRET");
-if (string.IsNullOrWhiteSpace(aiServiceSecret))
+var aiServiceSecret = RequireEnvironmentVariable("AI_SERVICE_SECRET", minimumLength: 32);
+var aiServiceUrl = RequireEnvironmentVariable("AI_SERVICE_URL");
+if (!Uri.TryCreate(aiServiceUrl, UriKind.Absolute, out var aiServiceBaseUri))
 {
     throw new InvalidOperationException(
-        "AI_SERVICE_SECRET .env'de tanımlı değil. ai-service ile aynı sırrı kullanmalı.");
+        "AI_SERVICE_URL must be a valid absolute URL.");
 }
 
 builder.Services.AddHttpClient<IAiServiceClient, AiServiceClient>(client =>
 {
-    client.BaseAddress = new Uri(Env.GetString("AI_SERVICE_URL") ?? "http://localhost:8001");
+    client.BaseAddress = aiServiceBaseUri;
     client.Timeout = TimeSpan.FromMinutes(5);
     client.DefaultRequestHeaders.Add("X-Internal-Secret", aiServiceSecret);
 });

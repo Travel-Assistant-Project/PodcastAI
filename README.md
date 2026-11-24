@@ -153,6 +153,25 @@ EXPO_PUBLIC_API_BASE_URL=http://localhost:5191
 
 Keep API keys, database credentials, and other secrets in environment files or a secure configuration system. Do not commit sensitive values to version control.
 
+### Security configuration
+
+The repository includes safe templates for local configuration:
+
+```bash
+cp backend/PodcastAPI/.env.example backend/PodcastAPI/.env
+cp ai-service/.env.example ai-service/.env
+```
+
+Replace every `replace-with-...` value with a newly generated secret before
+starting the services. `JWT_SECRET` and `AI_SERVICE_SECRET` must contain at
+least 32 characters, and the backend and AI service must use the same
+`AI_SERVICE_SECRET`. Real `.env` files and Firebase service-account JSON files
+are ignored by Git.
+
+If a real credential was ever committed, removing it from the current file is
+not sufficient: revoke or rotate it at the provider first. Coordinate any Git
+history rewrite with every collaborator because it changes commit hashes.
+
 ## 🧩 Development Workflow
 
 For local development, run each component in a separate terminal:

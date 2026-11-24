@@ -1,13 +1,11 @@
-version: '3.8'
-
 services:
   podcast-db:
     image: postgres:15-alpine
     container_name: podcast_postgres_db
     environment:
-      POSTGRES_DB: podcast_db
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: supersecretpassword
+      POSTGRES_DB: ${DB_NAME:-podcast_db}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASS:?Set DB_PASS in backend/PodcastAPI/.env}
     ports:
       - "5432:5432"
     volumes:
@@ -21,15 +19,16 @@ services:
       dockerfile: Dockerfile
     container_name: podcast_net_backend
     environment:
-      - ASPNETCORE_ENVIRONMENT=Development
-      - DB_HOST=podcast-db
-      - DB_PORT=5432
-      - DB_NAME=podcast_db
-      - DB_USER=postgres
-      - DB_PASS=supersecretpassword
-      - JWT_SECRET=bu_senin_cok_gizli_ve_en_az_32_karakterli_anahtarin_123456
-      - AI_SERVICE_SECRET=6zNMp1rRwEDZpXSITgSs6a-Ex5T7qsFiYYocV1QLUhSv2pXaOa_O0D7CaYtZY37s
-      - AI_SERVICE_URL=http://localhost:8001
+      ASPNETCORE_ENVIRONMENT: Development
+      DB_HOST: podcast-db
+      DB_PORT: "5432"
+      DB_NAME: ${DB_NAME:-podcast_db}
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASS: ${DB_PASS:?Set DB_PASS in backend/PodcastAPI/.env}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in backend/PodcastAPI/.env}
+      AI_SERVICE_SECRET: ${AI_SERVICE_SECRET:?Set AI_SERVICE_SECRET in backend/PodcastAPI/.env}
+      AI_SERVICE_URL: ${AI_SERVICE_URL:?Set AI_SERVICE_URL in backend/PodcastAPI/.env}
+      LISTEN_NOTES_API_KEY: ${LISTEN_NOTES_API_KEY:-}
     ports:
       - "5193:8080"
     networks:
